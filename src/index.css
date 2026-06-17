@@ -1,0 +1,79 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --font-serif: 'Georgia', 'Times New Roman', serif;
+  --font-mono: 'SF Mono', 'Fira Code', 'Fira Mono', 'Roboto Mono', monospace;
+
+  /* Arena-inspired warm sand palette */
+  --color-sand-50: #fdfcf9;
+  --color-sand-100: #faf7f0;
+  --color-sand-200: #f3ede0;
+  --color-sand-300: #e8dfcc;
+  --color-sand-400: #d4c9ae;
+  --color-sand-500: #bfae8e;
+  --color-sand-600: #a89572;
+  --color-sand-700: #8a7a5e;
+  --color-sand-800: #6e614b;
+  --color-sand-900: #514839;
+
+  /* Leather dark tones */
+  --color-ink-50: #f5f4f2;
+  --color-ink-100: #e8e6e1;
+  --color-ink-200: #d1cdc5;
+  --color-ink-300: #b5afa3;
+  --color-ink-400: #958d7e;
+  --color-ink-500: #7a7164;
+  --color-ink-600: #625a4f;
+  --color-ink-700: #4a443b;
+  --color-ink-800: #332f28;
+  --color-ink-900: #1c1a16;
+  --color-ink-950: #0e0d0b;
+
+  /* Scholastic accents */
+  --color-accent-red: #c0392b;
+  --color-accent-blue: #2f6fa7;
+  --color-accent-green: #27864a;
+  --color-accent-teal: #1a8a7d;
+  --color-accent-yellow: #d4a843;
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--color-sand-50);
+  color: var(--color-ink-800);
+  overscroll-behavior: none;
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--color-sand-400); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--color-sand-500); }
+
+input, textarea, select { font-family: inherit; }
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+
+.scrollbar-none { -ms-overflow-style: none; scrollbar-width: none; }
+.scrollbar-none::-webkit-scrollbar { display: none; }
+.line-clamp-1 { overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 1; }
+.line-clamp-2 { overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+
+/* Performance */
+img { content-visibility: auto; }
+.will-change-transform { will-change: transform; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
