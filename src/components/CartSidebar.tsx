@@ -152,7 +152,7 @@ export default function CartSidebar({ onCheckout }: Props) {
                   {discount > 0 && <div className="flex justify-between text-[11px] text-accent-green font-medium"><span>Discount</span><span>−₹{discount}</span></div>}
                   {couponDiscount > 0 && <div className="flex justify-between text-[11px] text-accent-green font-medium"><span>Coupon Saving</span><span>−₹{couponDiscount}</span></div>}
                   <div className="flex justify-between text-[12px] text-ink-500"><span>Delivery</span><span className={deliveryFee === 0 ? 'text-accent-green font-medium' : ''}>{deliveryFee === 0 ? 'Free' : `₹${deliveryFee}`}</span></div>
-                  {deliveryFee > 0 && totalAmount < 499 && <p className="text-[9px] text-accent-yellow">Add ₹{499 - totalAmount} for free delivery</p>}
+                  {deliveryFee > 0 && totalAmount < 149 && <p className="text-[9px] text-accent-yellow">Add ₹{149 - totalAmount} for free delivery</p>}
                   <div className="h-px bg-sand-200 my-1" />
                   <div className="flex justify-between text-[15px] font-bold text-ink-900"><span>Total</span><span className="font-serif">₹{total}</span></div>
                   {(discount + couponDiscount) > 0 && <p className="text-[10px] text-accent-green text-center">You save ₹{discount + couponDiscount}</p>}
