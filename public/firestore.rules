@@ -1,0 +1,113 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAdmin() {
+      return request.auth != null &&
+        exists(/databases/$(database)/documents/config/admins) &&
+        request.auth.uid in get(/databases/$(database)/documents/config/admins).data.uids;
+    }
+
+    // Products: public read, admin write
+    match /products/{productId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Orders: strict ownership + status validation
+    match /orders/{orderId} {
+      allow create: if request.auth != null
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.totalAmount is number
+        && request.resource.data.totalAmount >= 0
+        && request.resource.data.status == 'pending'
+        && request.resource.data.items is list
+        && request.resource.data.items.size() > 0
+        && request.resource.data.items.size() <= 50;
+
+      allow read: if request.auth != null && (
+        resource.data.userId == request.auth.uid || isAdmin()
+      );
+
+      // User can only: cancel own order OR request replacement on own delivered order
+      allow update: if request.auth != null && (
+        isAdmin() ||
+        (resource.data.userId == request.auth.uid && (
+          // Cancel: only pending/confirmed/processing → cancelled
+          (resource.data.status in ['pending', 'confirmed', 'processing'] &&
+           request.resource.data.status == 'cancelled' &&
+           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'canCancel'])) ||
+          // Replacement: only delivered, set replacementRequested=true
+          (resource.data.status == 'delivered' &&
+           request.resource.data.replacementRequested == true &&
+           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['replacementRequested']))
+        ))
+      );
+
+      allow delete: if isAdmin();
+    }
+
+    // Coupons: public read (validation), admin write
+    match /coupons/{code} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Gift Cards: auth read, atomic deduction via transaction, admin manages
+    match /giftcards/{code} {
+      allow read: if request.auth != null;
+      allow create, delete: if isAdmin();
+      allow update: if request.auth != null && (
+        isAdmin() ||
+        (request.resource.data.balance is number &&
+         request.resource.data.balance >= 0 &&
+         request.resource.data.balance < resource.data.balance)
+      );
+    }
+
+    // Profiles: user owns their own, size limited
+    match /profiles/{userId} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow write: if request.auth != null && request.auth.uid == userId
+        && request.resource.data.keys().hasOnly(['phone', 'displayName'])
+        && (request.resource.data.phone is string ? request.resource.data.phone.size() <= 10 : true)
+        && (request.resource.data.displayName is string ? request.resource.data.displayName.size() <= 100 : true);
+    }
+
+    // Addresses: user owns, limited fields
+    match /addresses/{addressId} {
+      allow create: if request.auth != null
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.keys().hasAll(['userId', 'name', 'phone', 'address', 'city', 'state', 'pincode', 'label']);
+      allow read, delete: if request.auth != null
+        && resource.data.userId == request.auth.uid;
+      allow update: if false; // No updating addresses, delete and recreate
+    }
+
+    // Contacts: public create with validation, admin reads
+    match /contacts/{contactId} {
+      allow create: if true
+        && request.resource.data.name is string
+        && request.resource.data.email is string
+        && request.resource.data.message is string
+        && request.resource.data.name.size() >= 2
+        && request.resource.data.name.size() <= 100
+        && request.resource.data.email.size() >= 5
+        && request.resource.data.email.size() <= 254
+        && request.resource.data.message.size() >= 3
+        && request.resource.data.message.size() <= 500;
+      allow read, update, delete: if isAdmin();
+    }
+
+    // Config: public read, admin write
+    match /config/{configId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Deny everything else
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
