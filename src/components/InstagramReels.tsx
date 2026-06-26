@@ -1,16 +1,23 @@
 import { useState, useEffect, useRef } from 'react';
-import { ChevronLeft, ChevronRight, Play, ExternalLink } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react';
 import { subscribeSiteConfig, type SiteConfig } from '../lib/firebase';
 
-function getVideoEmbed(url: string): { type: 'youtube' | 'link'; embedUrl: string } {
-  // YouTube Shorts: youtube.com/shorts/ID or youtu.be/ID
-  const ytShort = url.match(/youtube\.com\/shorts\/([^/?&]+)/) || url.match(/youtu\.be\/([^/?&]+)/);
-  if (ytShort) return { type: 'youtube', embedUrl: `https://www.youtube.com/embed/${ytShort[1]}?autoplay=1&loop=1&mute=1&playsinline=1` };
-  // Regular YouTube
-  const yt = url.match(/(?:youtube\.com\/watch\?v=|youtube\.com\/embed\/)([^/?&]+)/);
-  if (yt) return { type: 'youtube', embedUrl: `https://www.youtube.com/embed/${yt[1]}?autoplay=1&loop=1&mute=1&playsinline=1` };
-  // Anything else — open as link
-  return { type: 'link', embedUrl: url };
+function parseVideo(url: string): { type: 'youtube' | 'instagram' | 'other'; id: string } {
+  // YouTube Shorts: youtube.com/shorts/ID?si=...
+  const yts = url.match(/youtube\.com\/shorts\/([^/?&\s]+)/);
+  if (yts) return { type: 'youtube', id: yts[1] };
+  // youtu.be/ID
+  const ytb = url.match(/youtu\.be\/([^/?&\s]+)/);
+  if (ytb) return { type: 'youtube', id: ytb[1] };
+  // youtube.com/watch?v=ID
+  const ytw = url.match(/youtube\.com\/watch\?v=([^/?&\s]+)/);
+  if (ytw) return { type: 'youtube', id: ytw[1] };
+  // youtube.com/embed/ID
+  const yte = url.match(/youtube\.com\/embed\/([^/?&\s]+)/);
+  if (yte) return { type: 'youtube', id: yte[1] };
+  // Instagram
+  if (url.includes('instagram.com')) return { type: 'instagram', id: url };
+  return { type: 'other', id: url };
 }
 
 export default function InstagramReels() {
@@ -18,7 +25,6 @@ export default function InstagramReels() {
   useEffect(() => subscribeSiteConfig(setCfg), []);
 
   const reels = (cfg.instagramReels?.filter(Boolean) || []).slice(0, 4);
-  const [playing, setPlaying] = useState<number | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   if (reels.length === 0) return null;
@@ -46,40 +52,38 @@ export default function InstagramReels() {
 
       <div ref={scrollRef} className="flex gap-4 overflow-x-auto scrollbar-none pb-2 -mx-2 px-2 snap-x snap-mandatory">
         {reels.map((url, i) => {
-          const video = getVideoEmbed(url);
-          return (
-            <div key={i} className="flex-shrink-0 w-[220px] sm:w-[240px] snap-start">
-              <div className="relative aspect-[9/16] rounded-2xl overflow-hidden bg-ink-900/5 border border-sand-200">
-                {playing === i && video.type === 'youtube' ? (
+          const v = parseVideo(url);
+
+          // YouTube — embed directly, plays on site
+          if (v.type === 'youtube') {
+            return (
+              <div key={i} className="flex-shrink-0 w-[220px] sm:w-[240px] snap-start">
+                <div className="relative aspect-[9/16] rounded-2xl overflow-hidden border border-sand-200 bg-black">
                   <iframe
-                    src={video.embedUrl}
+                    src={`https://www.youtube.com/embed/${v.id}?playsinline=1&rel=0&modestbranding=1`}
                     className="absolute inset-0 w-full h-full"
                     frameBorder="0"
                     allowFullScreen
-                    allow="autoplay; encrypted-media; picture-in-picture"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                   />
-                ) : (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center">
-                    <div className="h-14 w-14 rounded-full bg-white/90 flex items-center justify-center shadow-md mb-3">
-                      <Play className="h-6 w-6 text-ink-700 ml-0.5" />
-                    </div>
-                    <p className="text-[10px] text-ink-400 font-mono">Video {i + 1}</p>
-                  </div>
-                )}
-                <button
-                  onClick={() => {
-                    if (video.type === 'link') { window.open(url, '_blank'); return; }
-                    setPlaying(playing === i ? null : i);
-                  }}
-                  className="absolute inset-0 z-10"
-                />
-                {playing === i && (
-                  <a href={url} target="_blank" rel="noopener noreferrer"
-                    className="absolute top-3 right-3 h-7 w-7 rounded-full bg-white/90 flex items-center justify-center shadow-sm z-20 active:scale-90">
-                    <ExternalLink className="h-3.5 w-3.5 text-ink-600" />
-                  </a>
-                )}
+                </div>
               </div>
+            );
+          }
+
+          // Instagram / Other — show card that opens in new tab
+          return (
+            <div key={i} className="flex-shrink-0 w-[220px] sm:w-[240px] snap-start">
+              <a href={url} target="_blank" rel="noopener noreferrer"
+                className="block relative aspect-[9/16] rounded-2xl overflow-hidden border border-sand-200 bg-gradient-to-b from-sand-100 to-sand-200 hover:shadow-md transition-shadow">
+                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                  <ExternalLink className="h-8 w-8 text-ink-400 mb-2" />
+                  <p className="text-[11px] font-semibold text-ink-600">
+                    {v.type === 'instagram' ? 'View on Instagram' : 'Open Video'}
+                  </p>
+                  <p className="text-[9px] text-ink-400 mt-1 px-4 text-center truncate max-w-full">{url.replace(/https?:\/\//, '').slice(0, 30)}...</p>
+                </div>
+              </a>
             </div>
           );
         })}
