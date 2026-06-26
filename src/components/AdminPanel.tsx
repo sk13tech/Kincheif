@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { db } from '../lib/firebase';
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, type User } from 'firebase/auth';
 import { collection, doc, getDoc, getDocs, updateDoc, deleteDoc, setDoc, onSnapshot } from 'firebase/firestore';
-import { LayoutDashboard, Package, ShoppingCart, Users, Settings, LogOut, Lock, Loader2, X, Plus, Trash2, Save, ArrowLeft, ChevronRight, Search, AlertTriangle, Download, Clock, MapPin, CreditCard, Edit3, UserCheck, ShoppingBag, TrendingUp, AlertCircle, CheckCircle, RotateCcw, Truck, Phone, CalendarDays, Menu as MenuIcon } from 'lucide-react';
+import { LayoutDashboard, Package, ShoppingCart, Users, Settings, LogOut, Lock, Loader2, X, Plus, Trash2, Save, ArrowLeft, ChevronRight, Search, AlertTriangle, Download, Clock, MapPin, CreditCard, Edit3, UserCheck, ShoppingBag, TrendingUp, AlertCircle, CheckCircle, RotateCcw, Truck, Phone, CalendarDays, Menu as MenuIcon, Play } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 
 /* ═══ Separate Auth for Admin (doesn't touch user Google session) ═══ */
@@ -575,27 +575,25 @@ function SettingsPage() {
 }
 
 function SiteConfig() {
-  const [cfg, setCfg] = useState<Record<string, string>>({}); const [cats, setCats] = useState<string[]>([]); const [newCat, setNewCat] = useState(''); const [busy, setBusy] = useState(false); const [loading, setLoading] = useState(true);
+  const [cfg, setCfg] = useState<Record<string, any>>({}); const [cats, setCats] = useState<string[]>([]); const [newCat, setNewCat] = useState(''); const [busy, setBusy] = useState(false); const [loading, setLoading] = useState(true);
   useEffect(() => { Promise.all([getDoc(doc(db, 'config', 'site')), getDoc(doc(db, 'config', 'categories'))]).then(([s, c]) => {
     if (s.exists()) {
       const d = s.data() as any;
-      // Convert booleans to strings for toggle UI
       ['showHeroTitle', 'showHeroBadge', 'showHeroSubtitle', 'showTestimonials'].forEach(k => { if (d[k] !== undefined) d[k] = String(d[k]); });
-      // Convert reels array to newline string for textarea
-      if (Array.isArray(d.instagramReels)) d.instagramReels = d.instagramReels.join('\n');
       setCfg(d);
     }
     if (c.exists()) setCats(c.data().list || []); setLoading(false);
   }); }, []);
   const save = async () => {
     setBusy(true);
-    const siteData: any = { ...cfg };
-    // Convert toggle strings to booleans
-    ['showHeroTitle', 'showHeroBadge', 'showHeroSubtitle', 'showTestimonials'].forEach(k => { if (siteData[k] !== undefined) siteData[k] = siteData[k] !== 'false'; });
-    // Convert reels textarea to array
-    if (typeof siteData.instagramReels === 'string') siteData.instagramReels = siteData.instagramReels.split('\n').map((s: string) => s.trim()).filter(Boolean);
-    await setDoc(doc(db, 'config', 'site'), siteData, { merge: true });
-    await setDoc(doc(db, 'config', 'categories'), { list: cats });
+    try {
+      const sd: any = {};
+      // Only save string fields — skip arrays/objects to avoid Firestore type issues
+      Object.keys(cfg).forEach(k => { if (k !== 'instagramReels' && k !== '_ts') sd[k] = cfg[k]; });
+      ['showHeroTitle', 'showHeroBadge', 'showHeroSubtitle', 'showTestimonials'].forEach(k => { if (sd[k] !== undefined) sd[k] = sd[k] !== 'false'; });
+      await setDoc(doc(db, 'config', 'site'), sd, { merge: true });
+      await setDoc(doc(db, 'config', 'categories'), { list: cats });
+    } catch (e) { alert('Save failed. Check console.'); }
     setBusy(false);
   };
   const brandFields = [['siteName', 'Brand Name'], ['logoUrl', 'Logo Icon URL'], ['logoTextUrl', 'Logo + Text URL'], ['heroTitle', 'Hero Title'], ['heroSubtitle', 'Hero Subtitle'], ['heroBadge', 'Hero Badge'], ['heroImage', 'Hero Image URL'], ['upiTemplate', 'UPI Payment Link (use <amount> for amount)']];
@@ -626,11 +624,7 @@ function SiteConfig() {
           </div>
         ))}
       </div>
-      {/* Video Reels */}
-      <div className={`${card} p-6 space-y-3`}><p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Video Reels / Shorts</p>
-        <p className="text-xs text-slate-400 -mt-2">Add up to 4 YouTube Shorts or video URLs (one per line).</p>
-        <textarea value={cfg.instagramReels || ''} onChange={e => setCfg({ ...cfg, instagramReels: e.target.value })} rows={4} className={`${input} resize-none font-mono text-xs`} placeholder={"https://youtube.com/shorts/abc123\nhttps://youtube.com/shorts/def456"} />
-      </div>
+
       <button onClick={save} disabled={busy} className={btn1}>{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Save Settings</button>
     </div>
   );
@@ -787,9 +781,64 @@ function Replacements() {
 }
 
 /* ═══════════════════════════════════════════
-   LAYOUT — top bar for main nav, sidebar for secondary
+   REELS MANAGEMENT (separate page)
    ═══════════════════════════════════════════ */
-type Page = 'dashboard' | 'orders' | 'products' | 'customers' | 'replacements' | 'settings';
+function ReelsPage() {
+  const [reels, setReels] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    getDoc(doc(db, 'config', 'site')).then(s => {
+      if (s.exists()) { const d = s.data(); setReels(Array.isArray(d.instagramReels) ? d.instagramReels : []); }
+      setLoading(false);
+    });
+  }, []);
+
+  const addReel = () => { if (reels.length < 4) setReels([...reels, '']); };
+  const updateReel = (i: number, v: string) => { const a = [...reels]; a[i] = v; setReels(a); };
+  const removeReel = (i: number) => { const a = [...reels]; a.splice(i, 1); setReels(a); };
+  const save = async () => {
+    setBusy(true);
+    try { await setDoc(doc(db, 'config', 'site'), { instagramReels: reels.filter(Boolean).slice(0, 4) }, { merge: true }); }
+    catch { alert('Save failed'); }
+    setBusy(false);
+  };
+
+  if (loading) return <div className="py-10 text-center"><Loader2 className="h-5 w-5 animate-spin text-slate-400 mx-auto" /></div>;
+
+  return (
+    <div className="space-y-4 max-w-2xl">
+      <div className="flex items-center justify-between">
+        <div><h1 className="text-2xl font-bold text-slate-900">Reels</h1><p className="text-xs text-slate-400 mt-1">Add up to 4 YouTube Shorts or video URLs</p></div>
+        <button onClick={addReel} disabled={reels.length >= 4} className={btn1}><Plus className="h-4 w-4" /> Add Reel</button>
+      </div>
+
+      {reels.length === 0 && <div className={`${card} p-10 text-center`}><p className="text-sm text-slate-400">No reels added. Click "Add Reel" to get started.</p></div>}
+
+      <div className="space-y-3">
+        {reels.map((url, i) => (
+          <div key={i} className={`${card} p-4 flex items-center gap-3`}>
+            <span className="text-xs font-bold text-slate-400 w-6 text-center flex-shrink-0">{i + 1}</span>
+            <input value={url} onChange={e => updateReel(i, e.target.value)} className={`${input} font-mono text-xs`} placeholder="https://youtube.com/shorts/abc123" />
+            <button onClick={() => removeReel(i)} className="h-9 w-9 rounded-xl hover:bg-red-50 flex items-center justify-center flex-shrink-0"><Trash2 className="h-4 w-4 text-red-500" /></button>
+          </div>
+        ))}
+      </div>
+
+      {reels.length > 0 && (
+        <button onClick={save} disabled={busy} className={btn1}>
+          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Save Reels
+        </button>
+      )}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════
+   LAYOUT
+   ═══════════════════════════════════════════ */
+type Page = 'dashboard' | 'orders' | 'products' | 'customers' | 'replacements' | 'settings' | 'reels';
 const topNav: { label: string; page: Page; icon: typeof LayoutDashboard }[] = [
   { label: 'Dashboard', page: 'dashboard', icon: LayoutDashboard },
   { label: 'Orders', page: 'orders', icon: ShoppingCart },
@@ -798,6 +847,7 @@ const topNav: { label: string; page: Page; icon: typeof LayoutDashboard }[] = [
 const sideNav: { label: string; page: Page; icon: typeof LayoutDashboard }[] = [
   { label: 'Products', page: 'products', icon: Package },
   { label: 'Customers', page: 'customers', icon: Users },
+  { label: 'Reels', page: 'reels', icon: Play },
   { label: 'Settings', page: 'settings', icon: Settings },
 ];
 
@@ -877,6 +927,7 @@ function Layout() {
         {page === 'products' && <Products />}
         {page === 'customers' && <Customers />}
         {page === 'replacements' && <Replacements />}
+        {page === 'reels' && <ReelsPage />}
         {page === 'settings' && <SettingsPage />}
       </main>
     </div>
