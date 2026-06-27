@@ -58,10 +58,9 @@ export default function Header({ onNavigate, currentPage, onSearch }: HeaderProp
           <div className="flex h-14 items-center justify-between">
             {/* Logo */}
             <button onClick={() => onNavigate('home')} className="flex items-center gap-2 active:opacity-70 flex-shrink-0">
-              {/* Mobile: icon only, Desktop: full logo with text */}
-              <img src={logoIcon} alt={siteName} className="h-8 w-8 rounded-lg object-contain sm:hidden" />
-              <img src={logoFull} alt={siteName} className="h-8 object-contain hidden sm:block" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-              <span className="font-serif text-lg italic font-semibold text-ink-900 tracking-tight hidden sm:hidden">{siteName}</span>
+              {logoIcon ? <img src={logoIcon} alt={siteName} className="h-8 w-8 rounded-lg object-contain sm:hidden" /> : <div className="h-8 w-8 rounded-lg bg-sand-200 animate-pulse sm:hidden" />}
+              {logoFull ? <img src={logoFull} alt={siteName} className="h-8 object-contain hidden sm:block" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} /> : <div className="h-8 w-24 rounded-lg bg-sand-200 animate-pulse hidden sm:block" />}
+              {siteName && <span className="font-serif text-lg italic font-semibold text-ink-900 tracking-tight hidden sm:hidden">{siteName}</span>}
             </button>
 
             {/* Desktop Nav */}

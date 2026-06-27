@@ -12,7 +12,7 @@ export default function ContactSection() {
   const [honey, setHoney] = useState('');
   const [sent, setSent] = useState(false);
   const [error, setError] = useState('');
-  const [cfg, setCfg] = useState<SiteConfig>({});
+  const [cfg, setCfg] = useState<SiteConfig | null>(null);
 
   useEffect(() => { markFormOpen(FORM_ID); }, []);
   useEffect(() => subscribeSiteConfig(setCfg), []);
@@ -33,10 +33,10 @@ export default function ContactSection() {
 
   // Read contact details from Firebase config (admin-editable)
   const info = [
-    { icon: Phone, label: 'Phone', value: cfg.contactPhone || '—' },
-    { icon: Mail, label: 'Email', value: cfg.contactEmail || '—' },
-    { icon: MapPin, label: 'Address', value: [cfg.contactAddress, cfg.contactCity].filter(Boolean).join(', ') || '—' },
-    { icon: Clock, label: 'Hours', value: cfg.contactHours || '—' },
+    { icon: Phone, label: 'Phone', value: cfg?.contactPhone || '' },
+    { icon: Mail, label: 'Email', value: cfg?.contactEmail || '' },
+    { icon: MapPin, label: 'Address', value: [cfg?.contactAddress, cfg?.contactCity].filter(Boolean).join(', ') || '' },
+    { icon: Clock, label: 'Hours', value: cfg?.contactHours || '' },
   ];
 
   return (
@@ -54,7 +54,7 @@ export default function ContactSection() {
           {info.map(c => (
             <div key={c.label} className="flex items-center gap-3 rounded-lg border border-sand-200 bg-white p-3">
               <div className="h-8 w-8 inline-flex items-center justify-center rounded-full border border-sand-200 bg-sand-50 text-ink-500 flex-shrink-0"><c.icon className="h-3.5 w-3.5" /></div>
-              <div><p className="text-[9px] font-mono uppercase tracking-[.12em] text-ink-400">{c.label}</p><p className="text-[12px] font-semibold text-ink-700">{c.value}</p></div>
+              <div><p className="text-[9px] font-mono uppercase tracking-[.12em] text-ink-400">{c.label}</p>{c.value ? <p className="text-[12px] font-semibold text-ink-700">{c.value}</p> : <div className="h-4 w-28 bg-sand-200 rounded animate-pulse mt-0.5" />}</div>
             </div>
           ))}
         </motion.div>
