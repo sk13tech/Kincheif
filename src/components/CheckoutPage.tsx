@@ -9,12 +9,6 @@ import type { CustomerInfo } from '../types';
 
 interface Props { onBack: () => void; onOrderPlaced: (id: string) => void; }
 
-const upiApps = [
-  { id: 'gpay', name: 'Google Pay', img: '/googlepay.jpg' },
-  { id: 'phonepe', name: 'PhonePe', img: '/phonepay.jpg' },
-  { id: 'paytm', name: 'Paytm', img: '/paytm.jpg' },
-];
-
 export default function CheckoutPage({ onBack, onOrderPlaced }: Props) {
   const { items, totalAmount, deliveryFee, clearCart } = useCart();
   const [siteCfg, setSiteCfg] = useState<SiteConfig>({});
@@ -100,24 +94,68 @@ export default function CheckoutPage({ onBack, onOrderPlaced }: Props) {
   const loadAddr = (a: SavedAddress) => { setInfo({ name: a.name, email: a.email, phone: a.phone, address: a.address, city: a.city, state: a.state, pincode: a.pincode, notes: a.notes || '' }); setPinValid(true); };
   const doSaveAddr = async () => { if (user && info.address) { const id = await saveAddress(user.uid, info, addrLabel); if (id) setSavedAddrs(p => [...p, { ...info, id, label: addrLabel }]); setShowSaveAddr(false); } };
 
-  const placeOrder = async () => {
-    if (!user?.uid) { alert('Please sign in first.'); return; }
+  const [showPaid, setShowPaid] = useState(false);
+  const [qrTimer, setQrTimer] = useState(300); // 5 minutes in seconds
+  const [pendingOrderId, setPendingOrderId] = useState<string | null>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Start QR timer when payment step loads
+  useEffect(() => {
+    if (step === 'payment' && payable > 0) {
+      setQrTimer(300);
+      timerRef.current = setInterval(() => setQrTimer(t => { if (t <= 1) { clearInterval(timerRef.current!); return 0; } return t - 1; }), 1000);
+      return () => { if (timerRef.current) clearInterval(timerRef.current); };
+    }
+  }, [step, payable]);
+
+  // Create pending order when entering payment step (so it's recoverable)
+  useEffect(() => {
+    if (step === 'payment' && !pendingOrderId && user?.uid && items.length > 0) {
+      (async () => {
+        try {
+          const oid = await saveOrder(
+            { items, customer: info, paymentMethod: 'upi', transactionId: 'AWAITING_PAYMENT', totalAmount: payable, status: 'pending',
+              couponCode: coupon?.code, couponDiscount, giftCardCode: gc?.code, giftCardUsed: gcUsed, mrpTotal, productDiscount: discount },
+            { uid: user.uid, email: user.email || null, displayName: user.displayName || null },
+          );
+          setPendingOrderId(oid);
+        } catch {}
+      })();
+    }
+  }, [step]);
+
+  const completeOrder = async () => {
+    if (!user?.uid) return;
     if (payable > 0 && txnId.length < 4) return;
-    if (payable > 0 && !isValidTransactionId(txnId)) { alert('Invalid transaction ID format.'); return; }
-    if (!checkRateLimit('order', 3, 60000)) { alert('Too many attempts. Please wait a minute.'); return; }
-    if (items.length === 0) return;
+    if (payable > 0 && !isValidTransactionId(txnId)) { alert('Invalid transaction ID.'); return; }
+    if (!checkRateLimit('order', 3, 60000)) { alert('Too many attempts.'); return; }
     setBusy(true);
     try {
-      const oid = await saveOrder(
-        { items, customer: info, paymentMethod: 'upi', transactionId: payable === 0 ? 'GIFTCARD' : sanitize(txnId), totalAmount: payable, status: 'pending',
-          couponCode: coupon?.code, couponDiscount, giftCardCode: gc?.code, giftCardUsed: gcUsed, mrpTotal, productDiscount: discount },
-        { uid: user.uid, email: user.email || null, displayName: user.displayName || null },
-      );
-      sessionStorage.removeItem('purehome_coupon');
-      clearCart(); onOrderPlaced(oid);
-    } catch { alert('Order failed. Please try again.'); }
+      if (pendingOrderId) {
+        // Update existing pending order with txn ID
+        const { updateDoc, collection: fbCol, query: fbQ, where: fbW, getDocs: fbGet } = await import('firebase/firestore');
+        const { db: fireDb } = await import('../lib/firebase');
+        const q = fbQ(fbCol(fireDb, 'orders'), fbW('orderId', '==', pendingOrderId));
+        const snap = await fbGet(q);
+        if (!snap.empty) {
+          await updateDoc(snap.docs[0].ref, { transactionId: payable === 0 ? 'GIFTCARD' : sanitize(txnId) });
+        }
+        sessionStorage.removeItem('purehome_coupon');
+        clearCart(); onOrderPlaced(pendingOrderId);
+      } else {
+        const oid = await saveOrder(
+          { items, customer: info, paymentMethod: 'upi', transactionId: payable === 0 ? 'GIFTCARD' : sanitize(txnId), totalAmount: payable, status: 'pending',
+            couponCode: coupon?.code, couponDiscount, giftCardCode: gc?.code, giftCardUsed: gcUsed, mrpTotal, productDiscount: discount },
+          { uid: user.uid, email: user.email || null, displayName: user.displayName || null },
+        );
+        sessionStorage.removeItem('purehome_coupon');
+        clearCart(); onOrderPlaced(oid);
+      }
+    } catch { alert('Failed. Try again.'); }
     finally { setBusy(false); }
   };
+
+  const fmtTimer = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 
   // Reusable input class
   const ic = (f: keyof CustomerInfo) => `w-full rounded-lg border bg-white px-3.5 py-2.5 text-[14px] outline-none focus:ring-1 ${errs[f] ? 'border-accent-red/50 focus:ring-accent-red/20' : 'border-sand-300 focus:border-ink-400 focus:ring-ink-200'}`;
@@ -263,33 +301,61 @@ export default function CheckoutPage({ onBack, onOrderPlaced }: Props) {
                 <p className="font-serif text-xl font-bold text-ink-900">Covered by Gift Card</p>
                 <p className="text-[13px] text-ink-500 mt-1">No UPI payment needed.</p>
               </div>
-            ) : (
+            ) : !showPaid ? (
               <>
-                <div className="rounded-lg border border-sand-200 bg-white p-5 text-center">
-                  <p className="text-[10px] font-mono uppercase tracking-[.15em] text-ink-400 mb-1">Pay via UPI</p>
+                {/* QR Code */}
+                <div className="rounded-2xl border border-sand-200 bg-white p-6 text-center space-y-4">
+                  <p className="text-[10px] font-mono uppercase tracking-[.15em] text-ink-400">Scan & Pay</p>
                   <p className="font-serif text-3xl font-bold text-ink-900">₹{payable}</p>
+
+                  {/* QR Code via Google Charts API */}
+                  {qrTimer > 0 ? (
+                    <div className="inline-block rounded-2xl border-2 border-sand-200 p-3 bg-white">
+                      <img
+                        src={`https://chart.googleapis.com/chart?cht=qr&chs=220x220&chl=${encodeURIComponent((siteCfg.upiTemplate || '').replace('<amount>', String(payable)).replace('{amount}', String(payable)))}&choe=UTF-8`}
+                        alt="UPI QR Code"
+                        className="h-[180px] w-[180px] sm:h-[220px] sm:w-[220px]"
+                      />
+                    </div>
+                  ) : (
+                    <div className="py-8">
+                      <p className="text-[13px] text-accent-red font-semibold">QR Code Expired</p>
+                      <button onClick={() => setQrTimer(300)} className="mt-2 text-[12px] text-accent-blue font-semibold underline">Generate New QR</button>
+                    </div>
+                  )}
+
+                  {/* Timer */}
+                  {qrTimer > 0 && (
+                    <p className={`text-[13px] font-mono font-semibold ${qrTimer < 60 ? 'text-accent-red' : 'text-ink-500'}`}>
+                      Expires in {fmtTimer(qrTimer)}
+                    </p>
+                  )}
+
+                  <p className="text-[10px] text-ink-400">Scan with any UPI app to pay</p>
                 </div>
-                <div className="rounded-lg border border-sand-200 bg-white p-4">
-                  <p className="text-[11px] font-mono uppercase tracking-[.12em] text-ink-400 mb-3">Pay with UPI</p>
-                  <div className="grid grid-cols-3 gap-3">
-                    {upiApps.map(app => {
-                      const upiLink = (siteCfg.upiTemplate || '').replace('<amount>', String(payable)).replace('{amount}', String(payable));
-                      return (
-                        <a key={app.id} href={upiLink || '#'} className="flex flex-col items-center gap-2 rounded-xl border border-sand-200 p-3 hover:border-sand-400 hover:shadow-sm active:scale-[0.97] transition-all">
-                          <img src={app.img} alt={app.name} className="h-12 w-12 rounded-xl object-cover" />
-                          <p className="text-[11px] font-semibold text-ink-700">{app.name}</p>
-                        </a>
-                      );
-                    })}
-                  </div>
+
+                {/* I've Paid button */}
+                <button onClick={() => setShowPaid(true)}
+                  className="w-full rounded-full bg-ink-900 py-3 text-[13px] font-semibold text-sand-50 active:scale-[0.97]">
+                  I've Paid
+                </button>
+              </>
+            ) : (
+              /* Transaction ID input after clicking I've Paid */
+              <div className="rounded-lg border border-sand-200 bg-white p-5 space-y-4">
+                <div className="text-center">
+                  <CheckCircle className="h-8 w-8 text-accent-green mx-auto mb-2" />
+                  <p className="text-[14px] font-semibold text-ink-900">Enter Payment Details</p>
+                  <p className="text-[11px] text-ink-400 mt-1">Enter the UPI transaction ID from your payment app</p>
                 </div>
-                <div className="rounded-lg border border-sand-200 bg-white p-4">
+                <div>
                   <label className="block text-[11px] font-mono uppercase tracking-[.12em] text-ink-400 mb-2">Transaction ID / UTR</label>
-                  <input type="text" value={txnId} onChange={e => setTxnId(sanitize(e.target.value))} placeholder="Enter after payment" maxLength={50}
+                  <input type="text" value={txnId} onChange={e => setTxnId(sanitize(e.target.value))} placeholder="Enter transaction ID" maxLength={50}
                     className="w-full rounded-lg border border-sand-300 bg-sand-50 px-3.5 py-3 text-[14px] font-mono outline-none focus:bg-white focus:border-ink-400 focus:ring-1 focus:ring-ink-200" />
                   {txnId.length > 0 && txnId.length < 4 && <p className="mt-1 text-[10px] text-accent-red">Min 4 characters</p>}
                 </div>
-              </>
+                <button onClick={() => setShowPaid(false)} className="text-[11px] text-ink-400 underline">Back to QR Code</button>
+              </div>
             )}
 
             {/* Final total */}
@@ -304,9 +370,9 @@ export default function CheckoutPage({ onBack, onOrderPlaced }: Props) {
             </div>
 
             <div className="flex items-center justify-center gap-1.5 text-[10px] text-ink-400"><ShieldCheck className="h-4 w-4 text-accent-green" /> Secure & encrypted</div>
-            <button onClick={placeOrder} disabled={busy || (payable > 0 && txnId.length < 4)}
+            <button onClick={completeOrder} disabled={busy || (payable > 0 && (!showPaid || txnId.length < 4))}
               className="w-full inline-flex items-center justify-center gap-2 rounded-full bg-accent-green py-3.5 text-[14px] font-bold text-white active:scale-[0.97] disabled:opacity-50">
-              {busy ? <><Loader2 className="h-4 w-4 animate-spin" /> Placing…</> : <><Package className="h-4 w-4" /> Place Order — ₹{payable}</>}
+              {busy ? <><Loader2 className="h-4 w-4 animate-spin" /> Placing…</> : <><Package className="h-4 w-4" /> Complete Order — ₹{payable}</>}
             </button>
           </motion.div>
         )}

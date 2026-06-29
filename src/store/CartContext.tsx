@@ -88,10 +88,24 @@ function cartReducer(state: CartState, action: CartAction): CartState {
   }
 }
 
+// Load cart from localStorage on init
+function getInitialCart(): CartState {
+  try {
+    const saved = localStorage.getItem('cart_items');
+    if (saved) { const items = JSON.parse(saved); if (Array.isArray(items)) return { items, isOpen: false }; }
+  } catch {}
+  return { items: [], isOpen: false };
+}
+
 export function CartProvider({ children }: { children: ReactNode }) {
-  const [state, dispatch] = useReducer(cartReducer, { items: [], isOpen: false });
+  const [state, dispatch] = useReducer(cartReducer, undefined, getInitialCart);
   const [cfg, setCfg] = useState<SiteConfig>({});
   useEffect(() => subscribeSiteConfig(setCfg), []);
+
+  // Persist cart to localStorage on every change
+  useEffect(() => {
+    localStorage.setItem('cart_items', JSON.stringify(state.items));
+  }, [state.items]);
   const minFree = Number((cfg as any).minFreeDelivery) || 499;
   const fee = Number((cfg as any).deliveryFee) || 49;
 
