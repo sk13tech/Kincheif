@@ -1,6 +1,6 @@
 import { Mail, Phone, MapPin, Clock, Send, ChevronDown, Check } from 'lucide-react';
 import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
+
 import { saveContact, subscribeSiteConfig, type SiteConfig } from '../lib/firebase';
 import { sanitize, sanitizeEmail, checkRateLimit, isHoneypotTriggered, markFormOpen, isSubmissionTooFast } from '../lib/security';
 
@@ -43,23 +43,23 @@ export default function ContactSection() {
     <section className="mx-auto max-w-6xl px-4 sm:px-6 py-16">
       <div className="h-px bg-gradient-to-r from-transparent via-sand-300 to-transparent mb-14" />
       <div className="text-center mb-8">
-        <motion.div initial={{ opacity: 0, y: 12 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}>
+        <div>
           <p className="text-[10px] font-mono uppercase tracking-[.2em] text-ink-400 mb-1.5">Contact</p>
           <h2 className="font-serif text-xl sm:text-2xl text-ink-900">Contact Us</h2>
-        </motion.div>
+        </div>
       </div>
 
       <div className="grid lg:grid-cols-2 gap-6">
-        <motion.div initial={{ opacity: 0, x: -12 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} className="space-y-2.5">
+        <div className="space-y-2.5">
           {info.map(c => (
             <div key={c.label} className="flex items-center gap-3 rounded-lg border border-sand-200 bg-white p-3">
               <div className="h-8 w-8 inline-flex items-center justify-center rounded-full border border-sand-200 bg-sand-50 text-ink-500 flex-shrink-0"><c.icon className="h-3.5 w-3.5" /></div>
               <div><p className="text-[9px] font-mono uppercase tracking-[.12em] text-ink-400">{c.label}</p>{c.value ? <p className="text-[12px] font-semibold text-ink-700">{c.value}</p> : <div className="h-4 w-28 bg-sand-200 rounded animate-pulse mt-0.5" />}</div>
             </div>
           ))}
-        </motion.div>
+        </div>
 
-        <motion.div initial={{ opacity: 0, x: 12 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }}>
+        <div>
           <form onSubmit={submit} className="rounded-lg border border-sand-200 bg-white p-5 space-y-3">
             <div className="absolute -left-[9999px]" aria-hidden="true" tabIndex={-1}>
               <input type="text" name="website" value={honey} onChange={e => setHoney(e.target.value)} tabIndex={-1} autoComplete="off" />
@@ -90,7 +90,7 @@ export default function ContactSection() {
               {sent ? <><Check className="h-4 w-4" /> Sent</> : <><Send className="h-4 w-4" /> Send Message</>}
             </button>
           </form>
-        </motion.div>
+        </div>
       </div>
     </section>
   );

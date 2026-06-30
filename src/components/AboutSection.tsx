@@ -41,26 +41,24 @@ export default function AboutSection() {
       <div className="h-px bg-gradient-to-r from-transparent via-sand-300 to-transparent mb-14" />
 
       <div className="text-center mb-10">
-        <motion.div initial={{ opacity: 0, y: 12 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}>
+        <div>
           <p className="text-[10px] font-mono uppercase tracking-[.2em] text-ink-400 mb-1.5">Our Values</p>
-          <h2 className="font-serif text-xl sm:text-2xl text-ink-900">Why Choose <em>{brandName}</em>?</h2>
+          {brandName && <h2 className="font-serif text-xl sm:text-2xl text-ink-900">Why Choose <em>{brandName}</em>?</h2>}
           <p className="mt-2 text-[14px] text-ink-500 max-w-md mx-auto leading-relaxed">
             We believe food should be pure, honest, and full of love.
           </p>
-        </motion.div>
+        </div>
       </div>
 
-      {/* Values grid — icons only, no emojis */}
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {vals.map((v, i) => (
-          <motion.div key={v.title} initial={{ opacity: 0, y: 16 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: i * 0.08 }}
-            className={`group relative rounded-2xl border ${v.border} bg-gradient-to-br ${v.bg} p-5 transition-all hover:shadow-md hover:-translate-y-0.5`}>
+          <div key={v.title} className={`group relative rounded-2xl border ${v.border} bg-gradient-to-br ${v.bg} p-5 transition-all hover:shadow-md hover:-translate-y-0.5 animate-fade-in`} style={{ animationDelay: `${i * 80}ms` }}>
             <div className={`h-11 w-11 rounded-xl ${v.iconBg} flex items-center justify-center mb-4`}>
               <v.icon className="h-5 w-5" />
             </div>
             <h3 className="text-[14px] font-bold text-ink-800 mb-1">{v.title}</h3>
             <p className="text-[12px] text-ink-500 leading-relaxed">{v.desc}</p>
-          </motion.div>
+          </div>
         ))}
       </div>
 

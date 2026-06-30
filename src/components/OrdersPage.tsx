@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
-import { Package, Clock, CheckCircle, Truck, Home, ArrowLeft, ChevronRight, RefreshCw, Tag, Gift, XCircle, RotateCcw, Loader2, AlertTriangle, MessageSquare } from 'lucide-react';
+import { Package, Clock, CheckCircle, Truck, Home, ArrowLeft, ChevronRight, RefreshCw, Tag, Gift, XCircle, RotateCcw, Loader2, AlertTriangle, MessageSquare, QrCode } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../store/AuthContext';
-import { subscribeToOrders, cancelOrder, requestReplacement, type FirestoreOrder } from '../lib/firebase';
+import { subscribeToOrders, cancelOrder, requestReplacement, subscribeSiteConfig, type FirestoreOrder, type SiteConfig, db } from '../lib/firebase';
+import { sanitize } from '../lib/security';
 
 interface Props { onBack: () => void; }
 
@@ -24,6 +25,76 @@ function getReplaceDaysLeft(order: FirestoreOrder): number {
 }
 
 const replaceReasons = ['Damaged product', 'Wrong item received', 'Missing items', 'Quality issue', 'Packaging damaged', 'Other'];
+
+function CompletePaymentCard({ order, onComplete }: { order: FirestoreOrder; onComplete: () => void }) {
+  const [cfg, setCfg] = useState<SiteConfig>({});
+  const [txnId, setTxnId] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [showTxn, setShowTxn] = useState(false);
+  const [timer, setTimer] = useState(300);
+
+  useEffect(() => subscribeSiteConfig(setCfg), []);
+  useEffect(() => { const t = setInterval(() => setTimer(v => v <= 1 ? (clearInterval(t), 0) : v - 1), 1000); return () => clearInterval(t); }, []);
+
+  const qrData = (cfg.upiTemplate || '').replace(/<amount>/g, String(order.totalAmount)).replace(/\{amount\}/g, String(order.totalAmount)).replace('%3Camount%3E', String(order.totalAmount));
+  const fmtT = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+
+  const submit = async () => {
+    if (txnId.length < 4) return;
+    setBusy(true);
+    try {
+      const { collection: fbCol, query: fbQ, where: fbW, getDocs: fbGet, updateDoc } = await import('firebase/firestore');
+      const q = fbQ(fbCol(db, 'orders'), fbW('orderId', '==', order.orderId));
+      const snap = await fbGet(q);
+      if (!snap.empty) await updateDoc(snap.docs[0].ref, { transactionId: sanitize(txnId) });
+      onComplete();
+    } catch { alert('Failed. Try again.'); }
+    setBusy(false);
+  };
+
+  return (
+    <div className="rounded-lg border-2 border-accent-yellow/30 bg-accent-yellow/5 p-4 space-y-4">
+      <div className="text-center">
+        <QrCode className="h-6 w-6 text-accent-yellow mx-auto mb-1" />
+        <p className="text-[13px] font-semibold text-ink-800">Payment Pending</p>
+        <p className="text-[11px] text-ink-500">Scan to pay ₹{order.totalAmount}</p>
+      </div>
+
+      {!showTxn ? (
+        <>
+          {timer > 0 && qrData ? (
+            <div className="text-center">
+              <div className="inline-block rounded-2xl border-2 border-sand-200 p-2 bg-white">
+                <img src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(qrData)}`} alt="QR" className="h-[160px] w-[160px]" />
+              </div>
+              <p className={`text-[12px] font-mono font-semibold mt-2 ${timer < 60 ? 'text-accent-red' : 'text-ink-500'}`}>{fmtT(timer)}</p>
+            </div>
+          ) : (
+            <div className="text-center py-4">
+              <p className="text-[12px] text-accent-red font-semibold">QR Expired</p>
+              <button onClick={() => setTimer(300)} className="text-[11px] text-accent-blue underline mt-1">Refresh</button>
+            </div>
+          )}
+          <button onClick={() => setShowTxn(true)} className="w-full rounded-full bg-ink-900 py-2.5 text-[12px] font-semibold text-sand-50 active:scale-[0.97]">I've Paid</button>
+        </>
+      ) : (
+        <>
+          <div>
+            <label className="block text-[10px] font-mono uppercase tracking-[.12em] text-ink-400 mb-1">Transaction ID</label>
+            <input value={txnId} onChange={e => setTxnId(e.target.value)} placeholder="Enter UTR / Txn ID" maxLength={50}
+              className="w-full rounded-lg border border-sand-300 bg-white px-3 py-2.5 text-[13px] font-mono outline-none focus:border-ink-400" />
+          </div>
+          <div className="flex gap-2">
+            <button onClick={() => setShowTxn(false)} className="flex-1 rounded-full border border-sand-300 py-2.5 text-[11px] font-semibold text-ink-600 active:scale-[0.97]">Back to QR</button>
+            <button onClick={submit} disabled={busy || txnId.length < 4} className="flex-1 rounded-full bg-accent-green py-2.5 text-[11px] font-semibold text-white active:scale-[0.97] disabled:opacity-40">
+              {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin mx-auto" /> : 'Complete Payment'}
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
 
 export default function OrdersPage({ onBack }: Props) {
   const { user, login } = useAuth();
@@ -192,6 +263,11 @@ export default function OrdersPage({ onBack }: Props) {
                   </div>
                 )}
               </div>
+
+              {/* Complete Payment — for AWAITING_PAYMENT orders */}
+              {sel.transactionId === 'AWAITING_PAYMENT' && sel.status === 'pending' && (
+                <CompletePaymentCard order={sel} onComplete={() => setSel(null)} />
+              )}
 
               {/* Actions */}
               <div className="space-y-2">

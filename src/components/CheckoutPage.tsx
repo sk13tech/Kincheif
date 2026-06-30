@@ -312,7 +312,7 @@ export default function CheckoutPage({ onBack, onOrderPlaced }: Props) {
                   {qrTimer > 0 ? (
                     <div className="inline-block rounded-2xl border-2 border-sand-200 p-3 bg-white">
                       <img
-                        src={`https://chart.googleapis.com/chart?cht=qr&chs=220x220&chl=${encodeURIComponent((siteCfg.upiTemplate || '').replace('<amount>', String(payable)).replace('{amount}', String(payable)))}&choe=UTF-8`}
+                        src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent((siteCfg.upiTemplate || '').replace(/<amount>/g, String(payable)).replace(/\{amount\}/g, String(payable)).replace('%3Camount%3E', String(payable)))}`}
                         alt="UPI QR Code"
                         className="h-[180px] w-[180px] sm:h-[220px] sm:w-[220px]"
                       />
