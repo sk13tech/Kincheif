@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { db } from '../lib/firebase';
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, type User } from 'firebase/auth';
 import { collection, doc, getDoc, getDocs, updateDoc, deleteDoc, setDoc, onSnapshot } from 'firebase/firestore';
-import { LayoutDashboard, Package, ShoppingCart, Users, Settings, LogOut, Lock, Loader2, X, Plus, Trash2, Save, ArrowLeft, ChevronRight, Search, Download, Clock, MapPin, CreditCard, Edit3, UserCheck, ShoppingBag, TrendingUp, AlertCircle, CheckCircle, RotateCcw, Truck, Phone, CalendarDays, Menu as MenuIcon, Play } from 'lucide-react';
+import { LayoutDashboard, Package, ShoppingCart, Users, Settings, LogOut, Lock, Loader2, X, Plus, Trash2, Save, ArrowLeft, ChevronRight, Search, Download, Clock, MapPin, CreditCard, Edit3, UserCheck, ShoppingBag, TrendingUp, AlertCircle, CheckCircle, RotateCcw, Truck, Phone, CalendarDays, Menu as MenuIcon, Play, Sun, Moon } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 
 /* ═══ Separate Auth for Admin (doesn't touch user Google session) ═══ */
@@ -16,13 +16,25 @@ const adminApp = initializeApp({
 }, 'admin-auth');
 const adminAuth = getAuth(adminApp);
 
-/* ═══ Design Tokens ═══ */
+/* ═══ Dark Mode Context ═══ */
+import { createContext } from 'react';
+const DarkCtx = createContext(false);
+
+// Inject pie chart animation CSS once
+if (typeof document !== 'undefined' && !document.getElementById('admin-pie-css')) {
+  const style = document.createElement('style');
+  style.id = 'admin-pie-css';
+  style.textContent = `@keyframes pieSpinIn{from{transform:rotate(-90deg);opacity:0}to{transform:rotate(0);opacity:1}}@keyframes pieFadeIn{from{opacity:0;transform:scale(0.8)}to{opacity:1;transform:scale(1)}}`;
+  document.head.appendChild(style);
+}
+
+/* ═══ Design Tokens (dark-mode aware via CSS classes) ═══ */
 const cn = (...c: (string | false | undefined)[]) => c.filter(Boolean).join(' ');
-const card = 'bg-white rounded-2xl border border-slate-200/80 shadow-sm';
-const input = 'w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 placeholder:text-slate-400';
-const label = 'block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5';
+const card = 'bg-white dark:bg-slate-800 rounded-2xl border border-slate-200/80 dark:border-slate-700 shadow-sm';
+const input = 'w-full bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 dark:text-slate-200 outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 placeholder:text-slate-400 dark:placeholder:text-slate-500';
+const label = 'block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5';
 const btn1 = 'bg-emerald-600 text-white text-sm font-semibold px-5 py-2.5 rounded-xl hover:bg-emerald-700 active:scale-[0.97] transition-all disabled:opacity-40 inline-flex items-center gap-2';
-const btn2 = 'bg-slate-100 text-slate-700 text-sm font-medium px-4 py-2.5 rounded-xl hover:bg-slate-200 active:scale-[0.97] transition-all inline-flex items-center gap-2';
+const btn2 = 'bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 text-sm font-medium px-4 py-2.5 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-600 active:scale-[0.97] transition-all inline-flex items-center gap-2';
 
 const badge = (color: string) => `inline-flex items-center text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${color}`;
 const statusStyle: Record<string, string> = {
@@ -45,25 +57,36 @@ function downloadCSV(rows: Record<string, any>[], filename: string) {
 /* ═══════════════════════════════════════════
    LOGIN SCREEN
    ═══════════════════════════════════════════ */
+/* ═══ Login rate limiter ═══ */
+let loginAttempts = 0;
+let loginLockUntil = 0;
+
 function LoginScreen() {
   const [email, setEmail] = useState(''); const [pass, setPass] = useState(''); const [err, setErr] = useState(''); const [busy, setBusy] = useState(false);
   const submit = async (e: React.FormEvent) => {
-    e.preventDefault(); setBusy(true); setErr('');
+    e.preventDefault();
+    // Rate limit: max 5 attempts per 5 minutes
+    if (Date.now() < loginLockUntil) { setErr(`Too many attempts. Wait ${Math.ceil((loginLockUntil - Date.now()) / 60000)} min.`); return; }
+    if (!email.trim() || !pass.trim() || pass.length < 6) { setErr('Enter valid credentials.'); return; }
+    setBusy(true); setErr('');
+    loginAttempts++;
+    if (loginAttempts >= 5) { loginLockUntil = Date.now() + 300000; loginAttempts = 0; }
     try {
-      const c = await signInWithEmailAndPassword(adminAuth, email, pass);
+      const c = await signInWithEmailAndPassword(adminAuth, email.trim().toLowerCase(), pass);
       const snap = await getDoc(doc(db, 'config', 'admins'));
-      if (!snap.exists() || !snap.data().uids?.includes(c.user.uid)) { await signOut(adminAuth); setErr('Access denied. Not an admin.'); }
+      if (!snap.exists() || !snap.data().uids?.includes(c.user.uid)) { await signOut(adminAuth); setErr('Access denied.'); }
+      else loginAttempts = 0; // Reset on success
     } catch (ex: any) {
       setErr(ex.code === 'auth/invalid-credential' ? 'Invalid email or password' : ex.code === 'auth/too-many-requests' ? 'Too many attempts. Try later.' : 'Login failed');
     }
     setBusy(false);
   };
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-emerald-50/30 px-4">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-emerald-50/30 dark:from-slate-900 dark:to-slate-800 px-4">
       <form onSubmit={submit} className={`${card} w-full max-w-sm p-8 space-y-5`}>
         <div className="text-center">
           <div className="h-14 w-14 rounded-2xl bg-emerald-600 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-emerald-200"><Lock className="h-7 w-7 text-white" /></div>
-          <h1 className="text-xl font-bold text-slate-900">Admin Panel</h1>
+          <h1 className="text-xl font-bold text-slate-900 dark:text-white">Admin Panel</h1>
           <p className="text-sm text-slate-500 mt-1">Admin Management</p>
         </div>
         <div><label className={label}>Email</label><input type="email" value={email} onChange={e => setEmail(e.target.value)} required className={input} placeholder="admin@yoursite.com" /></div>
@@ -119,7 +142,7 @@ function Dashboard({ goTo }: { goTo: (p: string) => void }) {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-slate-900">Dashboard</h1>
+      <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Dashboard</h1>
 
 
 
@@ -128,7 +151,7 @@ function Dashboard({ goTo }: { goTo: (p: string) => void }) {
         {stats.map(s => (
           <button key={s.label} onClick={() => goTo(s.page)} className={`${card} p-5 text-left hover:shadow-md transition-shadow group`}>
             <div className={`h-10 w-10 rounded-xl ${s.color} flex items-center justify-center mb-3`}><s.icon className="h-5 w-5" /></div>
-            <p className="text-2xl font-bold text-slate-900">{busy ? <span className="inline-block h-7 w-16 bg-slate-100 rounded animate-pulse" /> : s.value}</p>
+            <p className="text-2xl font-bold text-slate-900 dark:text-white">{busy ? <span className="inline-block h-7 w-16 bg-slate-100 dark:bg-slate-700 rounded animate-pulse" /> : s.value}</p>
             <p className="text-xs text-slate-400 mt-0.5 group-hover:text-emerald-600 transition-colors">{s.label} →</p>
           </button>
         ))}
@@ -137,7 +160,7 @@ function Dashboard({ goTo }: { goTo: (p: string) => void }) {
       {/* Recent orders */}
       <div>
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Recent Orders</h2>
+          <h2 className="text-sm font-bold text-slate-900 dark:text-slate-200 uppercase tracking-wider">Recent Orders</h2>
           <button onClick={() => goTo('orders')} className="text-xs text-emerald-600 font-semibold hover:text-emerald-700 flex items-center gap-1">View All <ChevronRight className="h-3 w-3" /></button>
         </div>
         <div className={`${card} overflow-hidden divide-y divide-slate-100`}>
@@ -178,21 +201,23 @@ function Dashboard({ goTo }: { goTo: (p: string) => void }) {
           const x2 = 50 + 40 * Math.cos(endAngle), y2 = 50 + 40 * Math.sin(endAngle);
           return { ...sl, d: slices.length === 1 ? `M50,10 A40,40 0 1,1 49.99,10 Z` : `M50,50 L${x1},${y1} A40,40 0 ${largeArc},1 ${x2},${y2} Z`, pct: Math.round(sl.value / total * 100) };
         });
-        return (
+         return (
           <div>
-            <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-3">Business Overview</h2>
-            <div className={`${card} p-6 flex flex-col sm:flex-row items-center gap-6`}>
-              <svg viewBox="0 0 100 100" className="h-36 w-36 flex-shrink-0">
-                {paths.map((p, i) => <path key={i} d={p.d} fill={p.color} className="hover:opacity-80 transition-opacity" />)}
-                <circle cx="50" cy="50" r="20" fill="white" />
-                <text x="50" y="48" textAnchor="middle" className="text-[8px] font-bold fill-slate-900">{total}</text>
-                <text x="50" y="56" textAnchor="middle" className="text-[5px] fill-slate-400 uppercase">orders</text>
-              </svg>
+            <h2 className="text-sm font-bold text-slate-900 dark:text-slate-200 uppercase tracking-wider mb-3">Business Overview</h2>
+            <div className={`${card} p-6 flex flex-col sm:flex-row items-center gap-8`}>
+              <div className="relative h-40 w-40 flex-shrink-0">
+                <svg viewBox="0 0 100 100" className="h-full w-full" style={{ animation: 'pieSpinIn 0.8s ease-out' }}>
+                  {paths.map((p, i) => <path key={i} d={p.d} fill={p.color} className="hover:opacity-75 transition-opacity cursor-pointer" style={{ animation: `pieFadeIn 0.5s ease-out ${i * 0.1}s both` }} />)}
+                  <circle cx="50" cy="50" r="22" className="fill-white dark:fill-slate-800" />
+                  <text x="50" y="47" textAnchor="middle" className="text-[10px] font-bold fill-slate-900 dark:fill-white">{total}</text>
+                  <text x="50" y="57" textAnchor="middle" className="text-[5px] fill-slate-400 uppercase tracking-widest">orders</text>
+                </svg>
+              </div>
               <div className="flex-1 grid grid-cols-2 gap-3 w-full">
                 {allSlices.map((sl, i) => (
-                  <div key={i} className="flex items-center gap-2.5">
-                    <div className="h-3 w-3 rounded-full flex-shrink-0" style={{ backgroundColor: sl.color, opacity: sl.value > 0 ? 1 : 0.3 }} />
-                    <div><p className="text-sm font-semibold text-slate-800">{sl.value} <span className="text-slate-400 font-normal">({total > 0 ? Math.round(sl.value / total * 100) : 0}%)</span></p><p className="text-[10px] text-slate-400">{sl.label}</p></div>
+                  <div key={i} className="flex items-center gap-2.5 p-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors">
+                    <div className="h-3.5 w-3.5 rounded-full flex-shrink-0 shadow-sm" style={{ backgroundColor: sl.color, opacity: sl.value > 0 ? 1 : 0.2 }} />
+                    <div><p className="text-sm font-semibold text-slate-800 dark:text-slate-200">{sl.value} <span className="text-slate-400 font-normal text-xs">({total > 0 ? Math.round(sl.value / total * 100) : 0}%)</span></p><p className="text-[10px] text-slate-400">{sl.label}</p></div>
                   </div>
                 ))}
               </div>
@@ -851,23 +876,29 @@ function Layout() {
   const [page, setPage] = useState<Page>('dashboard');
   const [sideOpen, setSideOpen] = useState(false);
   const [siteCfg, setSiteCfg] = useState<any>({});
+  const [dark, setDark] = useState(() => localStorage.getItem('admin_theme') === 'dark');
   const goTo = (p: string) => { setPage(p as Page); setSideOpen(false); };
   useEffect(() => onSnapshot(doc(db, 'config', 'site'), s => { if (s.exists()) setSiteCfg(s.data()); }), []);
+  useEffect(() => { document.documentElement.classList.toggle('dark', dark); localStorage.setItem('admin_theme', dark ? 'dark' : 'light'); }, [dark]);
 
   const logoUrl = siteCfg.logoUrl || '';
   const brandName = siteCfg.siteName || 'Admin';
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <header className="fixed inset-x-0 top-0 z-40 bg-white/95 backdrop-blur-sm border-b border-slate-200/80">
+    <DarkCtx.Provider value={dark}>
+    <div className={cn('min-h-screen transition-colors duration-300', dark ? 'bg-slate-900' : 'bg-slate-50')}>
+      <header className={cn('fixed inset-x-0 top-0 z-40 backdrop-blur-sm border-b transition-colors duration-300', dark ? 'bg-slate-900/95 border-slate-700' : 'bg-white/95 border-slate-200/80')}>
         <div className="max-w-6xl mx-auto flex items-center justify-between px-4 h-14">
           <div className="flex items-center gap-2.5">
-            <img src={logoUrl} alt="" className="h-8 w-8 rounded-xl object-contain" />
-            <div><p className="text-sm font-bold text-slate-900 leading-tight">{brandName}</p><p className="text-[9px] uppercase tracking-widest text-slate-400 leading-tight">Admin</p></div>
+            {logoUrl && <img src={logoUrl} alt="" className="h-8 w-8 rounded-xl object-contain" />}
+            <div><p className={cn('text-sm font-bold leading-tight', dark ? 'text-white' : 'text-slate-900')}>{brandName}</p><p className="text-[9px] uppercase tracking-widest text-slate-400 leading-tight">Admin</p></div>
           </div>
           <div className="flex items-center gap-2">
-            {/* Sidebar toggle for Products/Customers/Settings */}
-            <button onClick={() => setSideOpen(!sideOpen)} className="flex items-center gap-1.5 text-xs text-slate-500 font-semibold bg-slate-100 px-3 py-1.5 rounded-xl hover:bg-slate-200">
+            {/* Dark mode toggle — sun/moon */}
+            <button onClick={() => setDark(!dark)} className={cn('h-9 w-9 rounded-xl flex items-center justify-center transition-all', dark ? 'bg-slate-700 text-amber-400 hover:bg-slate-600' : 'bg-slate-100 text-slate-500 hover:bg-slate-200')} title={dark ? 'Light mode' : 'Dark mode'}>
+              {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            </button>
+            <button onClick={() => setSideOpen(!sideOpen)} className={cn('flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl', dark ? 'bg-slate-700 text-slate-300 hover:bg-slate-600' : 'bg-slate-100 text-slate-500 hover:bg-slate-200')}>
               <MenuIcon className="h-3.5 w-3.5" /> More
             </button>
           </div>
@@ -878,7 +909,7 @@ function Layout() {
             {topNav.map(n => (
               <button key={n.page} onClick={() => goTo(n.page)}
                 className={cn('flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all',
-                  page === n.page ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-200' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-100')}>
+                  page === n.page ? 'bg-emerald-600 text-white shadow-sm' : dark ? 'text-slate-400 hover:text-white hover:bg-slate-800' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-100')}>
                 <n.icon className="h-3.5 w-3.5" /> {n.label}
               </button>
             ))}
@@ -896,21 +927,21 @@ function Layout() {
       {sideOpen && (
         <>
           <div className="fixed inset-0 z-40 bg-black/10" onClick={() => setSideOpen(false)} />
-          <div className="fixed top-0 right-0 bottom-0 z-50 w-56 bg-white border-l border-slate-200 shadow-xl">
-            <div className="flex items-center justify-between px-4 h-14 border-b border-slate-100">
-              <p className="text-sm font-bold text-slate-900">Manage</p>
-              <button onClick={() => setSideOpen(false)} className="h-8 w-8 flex items-center justify-center rounded-xl hover:bg-slate-100"><X className="h-4 w-4 text-slate-500" /></button>
+          <div className={cn('fixed top-0 right-0 bottom-0 z-50 w-56 shadow-xl border-l', dark ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200')}>
+            <div className={cn('flex items-center justify-between px-4 h-14 border-b', dark ? 'border-slate-700' : 'border-slate-100')}>
+              <p className={cn('text-sm font-bold', dark ? 'text-white' : 'text-slate-900')}>Manage</p>
+              <button onClick={() => setSideOpen(false)} className={cn('h-8 w-8 flex items-center justify-center rounded-xl', dark ? 'hover:bg-slate-700' : 'hover:bg-slate-100')}><X className="h-4 w-4 text-slate-500" /></button>
             </div>
             <nav className="p-3 space-y-1">
               {sideNav.map(n => (
                 <button key={n.page} onClick={() => goTo(n.page)}
                   className={cn('w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all',
-                    page === n.page ? 'bg-emerald-600 text-white' : 'text-slate-600 hover:bg-slate-100')}>
+                    page === n.page ? 'bg-emerald-600 text-white' : dark ? 'text-slate-300 hover:bg-slate-700' : 'text-slate-600 hover:bg-slate-100')}>
                   <n.icon className="h-4 w-4" /> {n.label}
                 </button>
               ))}
-              <div className="border-t border-slate-100 mt-3 pt-3">
-                <button onClick={() => signOut(adminAuth)} className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium text-red-500 hover:bg-red-50"><LogOut className="h-4 w-4" /> Sign Out</button>
+              <div className={cn('border-t mt-3 pt-3', dark ? 'border-slate-700' : 'border-slate-100')}>
+                <button onClick={() => signOut(adminAuth)} className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"><LogOut className="h-4 w-4" /> Sign Out</button>
               </div>
             </nav>
           </div>
@@ -927,6 +958,7 @@ function Layout() {
         {page === 'settings' && <SettingsPage />}
       </main>
     </div>
+    </DarkCtx.Provider>
   );
 }
 
