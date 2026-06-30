@@ -1,8 +1,8 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { db } from '../lib/firebase';
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, type User } from 'firebase/auth';
 import { collection, doc, getDoc, getDocs, updateDoc, deleteDoc, setDoc, onSnapshot } from 'firebase/firestore';
-import { LayoutDashboard, Package, ShoppingCart, Users, Settings, LogOut, Lock, Loader2, X, Plus, Trash2, Save, ArrowLeft, ChevronRight, Search, AlertTriangle, Download, Clock, MapPin, CreditCard, Edit3, UserCheck, ShoppingBag, TrendingUp, AlertCircle, CheckCircle, RotateCcw, Truck, Phone, CalendarDays, Menu as MenuIcon, Play } from 'lucide-react';
+import { LayoutDashboard, Package, ShoppingCart, Users, Settings, LogOut, Lock, Loader2, X, Plus, Trash2, Save, ArrowLeft, ChevronRight, Search, Download, Clock, MapPin, CreditCard, Edit3, UserCheck, ShoppingBag, TrendingUp, AlertCircle, CheckCircle, RotateCcw, Truck, Phone, CalendarDays, Menu as MenuIcon, Play } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 
 /* ═══ Separate Auth for Admin (doesn't touch user Google session) ═══ */
@@ -82,9 +82,7 @@ function Dashboard({ goTo }: { goTo: (p: string) => void }) {
   const [s, setS] = useState({ orders: 0, revenue: 0, products: 0, customers: 0, pending: 0, confirmed: 0, processing: 0, shipped: 0, delivered: 0, replacement: 0 });
   const [recent, setRecent] = useState<any[]>([]);
   const [busy, setBusy] = useState(true);
-  const [dupTxns, setDupTxns] = useState<string[]>([]);
-  const [dupDismissed, setDupDismissed] = useState(false);
-  const prevDupRef = useRef('');
+
 
   useEffect(() => {
     let productCount = 0; let contactCount = 0; let countsLoaded = false;
@@ -95,15 +93,16 @@ function Dashboard({ goTo }: { goTo: (p: string) => void }) {
     // Real-time orders
     const unsub = onSnapshot(collection(db, 'orders'), (snap) => {
       const st: any = { orders: snap.size, revenue: 0, products: productCount, customers: contactCount, pending: 0, confirmed: 0, processing: 0, shipped: 0, delivered: 0, replacement: 0 };
-      const all: any[] = []; const txns: Record<string, number> = {};
-      snap.forEach(d => { const x = d.data(); if (x.status !== 'cancelled') { st.revenue += x.totalAmount || 0; st[x.status] = (st[x.status] || 0) + 1; } if (x.replacementRequested && x.replacementStatus !== 'reshipped') st.replacement++; all.push({ id: d.id, ...x });
-        if (x.transactionId && x.transactionId !== 'GIFTCARD' && x.status !== 'cancelled') txns[x.transactionId] = (txns[x.transactionId] || 0) + 1;
+      const all: any[] = [];
+      snap.forEach(d => { const x = d.data();
+        // Skip unpaid/auto-cancelled orders
+        if (x.transactionId === 'AWAITING_PAYMENT' || x.transactionId === 'AUTO_CANCELLED_UNPAID') return;
+        if (x.status !== 'cancelled') { st.revenue += x.totalAmount || 0; st[x.status] = (st[x.status] || 0) + 1; }
+        if (x.replacementRequested && x.replacementStatus !== 'reshipped') st.replacement++;
+        all.push({ id: d.id, ...x });
       });
       all.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
       setS({ ...st }); setRecent(all.slice(0, 5));
-      const newDups = Object.entries(txns).filter(([_, c]) => c > 1).map(([t]) => t);
-      const newDupStr = newDups.join(',');
-      if (newDupStr !== prevDupRef.current) { prevDupRef.current = newDupStr; setDupTxns(newDups); }
       if (countsLoaded || snap.size > 0) setBusy(false);
     });
     return () => unsub();
@@ -122,14 +121,7 @@ function Dashboard({ goTo }: { goTo: (p: string) => void }) {
     <div className="space-y-6">
       <h1 className="text-2xl font-bold text-slate-900">Dashboard</h1>
 
-      {/* Fraud alert — dismissible */}
-      {dupTxns.length > 0 && !dupDismissed && (
-        <div className="flex items-start gap-3 bg-red-50 border border-red-200 rounded-2xl px-5 py-4">
-          <AlertTriangle className="h-5 w-5 text-red-500 mt-0.5 flex-shrink-0" />
-          <div className="flex-1"><p className="text-sm font-semibold text-red-800">Duplicate Transaction IDs Detected</p><p className="text-xs text-red-600 mt-0.5">{dupTxns.join(', ')}</p></div>
-          <button onClick={() => setDupDismissed(true)} className="h-6 w-6 rounded-lg flex items-center justify-center hover:bg-red-100 flex-shrink-0"><X className="h-4 w-4 text-red-400" /></button>
-        </div>
-      )}
+
 
       {/* Stats grid */}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
@@ -241,7 +233,7 @@ function Orders() {
   const [orders, setOrders] = useState<any[]>([]); const [sel, setSel] = useState<any>(null); const [filter, setFilter] = useState('all'); const [search, setSearch] = useState(''); const [updating, setUpdating] = useState(false);
   const [dateFrom, setDateFrom] = useState(''); const [dateTo, setDateTo] = useState('');
 
-  useEffect(() => onSnapshot(collection(db, 'orders'), s => { const a: any[] = []; s.forEach(d => a.push({ id: d.id, ...d.data() })); a.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()); setOrders(a); }), []);
+  useEffect(() => onSnapshot(collection(db, 'orders'), s => { const a: any[] = []; s.forEach(d => { const x = d.data(); if (x.transactionId === 'AWAITING_PAYMENT' || x.transactionId === 'AUTO_CANCELLED_UNPAID') return; a.push({ id: d.id, ...x }); }); a.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()); setOrders(a); }), []);
 
   const txnCounts = useMemo(() => { const m: Record<string, number> = {}; orders.forEach(o => { if (o.transactionId && o.transactionId !== 'GIFTCARD' && o.status !== 'cancelled') m[o.transactionId] = (m[o.transactionId] || 0) + 1; }); return m; }, [orders]);
 

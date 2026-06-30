@@ -3,9 +3,8 @@ import { ArrowLeft, ShieldCheck, Check, Loader2, Package, Gift, MapPin, Trash2, 
 import { motion } from 'framer-motion';
 import { useCart } from '../store/CartContext';
 import { useAuth } from '../store/AuthContext';
-import { saveOrder, validateGiftCard, getSavedAddresses, saveAddress, deleteAddress, validatePincode, subscribeSiteConfig, db, type SavedAddress, type SiteConfig } from '../lib/firebase';
-import { collection, query, where, getDocs as fbGetDocs, updateDoc } from 'firebase/firestore';
-import { sanitize, sanitizeEmail, sanitizePhone, sanitizePincode, checkRateLimit, isValidIndianPhone, isValidEmail, isValidAddress, isValidTransactionId, safeJsonParse } from '../lib/security';
+import { saveOrder, validateGiftCard, getSavedAddresses, saveAddress, deleteAddress, validatePincode, subscribeSiteConfig, type SavedAddress, type SiteConfig } from '../lib/firebase';
+import { sanitize, sanitizeEmail, sanitizePhone, sanitizePincode, isValidIndianPhone, isValidEmail, isValidAddress, safeJsonParse } from '../lib/security';
 import type { CustomerInfo } from '../types';
 
 interface Props { onBack: () => void; onOrderPlaced: (id: string) => void; }
@@ -97,7 +96,7 @@ export default function CheckoutPage({ onBack, onOrderPlaced }: Props) {
 
   const [showPaid, setShowPaid] = useState(false);
   const [qrTimer, setQrTimer] = useState(300); // 5 minutes in seconds
-  const [pendingOrderId, setPendingOrderId] = useState<string | null>(null);
+
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Start QR timer when payment step loads
@@ -109,47 +108,24 @@ export default function CheckoutPage({ onBack, onOrderPlaced }: Props) {
     }
   }, [step, payable]);
 
-  // Create pending order when entering payment step (so it's recoverable)
-  useEffect(() => {
-    if (step === 'payment' && !pendingOrderId && user?.uid && items.length > 0) {
-      (async () => {
-        try {
-          const oid = await saveOrder(
-            { items, customer: info, paymentMethod: 'upi', transactionId: 'AWAITING_PAYMENT', totalAmount: payable, status: 'pending',
-              couponCode: coupon?.code, couponDiscount, giftCardCode: gc?.code, giftCardUsed: gcUsed, mrpTotal, productDiscount: discount },
-            { uid: user.uid, email: user.email || null, displayName: user.displayName || null },
-          );
-          setPendingOrderId(oid);
-        } catch {}
-      })();
-    }
-  }, [step]);
+  // Order only created when user submits txn ID — no AWAITING_PAYMENT orders
 
   const completeOrder = async () => {
     if (!user?.uid) return;
-    if (payable > 0 && txnId.length < 4) return;
-    if (payable > 0 && !isValidTransactionId(txnId)) { alert('Invalid transaction ID.'); return; }
-    if (!checkRateLimit('order', 3, 60000)) { alert('Too many attempts.'); return; }
+    if (payable > 0 && (txnId.length < 4 || txnId.length > 20)) return;
+    if (items.length === 0) return;
     setBusy(true);
     try {
-      if (pendingOrderId) {
-        const q = query(collection(db, 'orders'), where('orderId', '==', pendingOrderId));
-        const snap = await fbGetDocs(q);
-        if (!snap.empty) {
-          await updateDoc(snap.docs[0].ref, { transactionId: payable === 0 ? 'GIFTCARD' : sanitize(txnId) });
-        }
-        sessionStorage.removeItem('purehome_coupon');
-        clearCart(); onOrderPlaced(pendingOrderId);
-      } else {
-        const oid = await saveOrder(
-          { items, customer: info, paymentMethod: 'upi', transactionId: payable === 0 ? 'GIFTCARD' : sanitize(txnId), totalAmount: payable, status: 'pending',
-            couponCode: coupon?.code, couponDiscount, giftCardCode: gc?.code, giftCardUsed: gcUsed, mrpTotal, productDiscount: discount },
-          { uid: user.uid, email: user.email || null, displayName: user.displayName || null },
-        );
-        sessionStorage.removeItem('purehome_coupon');
-        clearCart(); onOrderPlaced(oid);
-      }
-    } catch (e) { alert('Order failed. Please try again.'); }
+      const txn = txnId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 20);
+      const oid = await saveOrder(
+        { items, customer: info, paymentMethod: 'upi', transactionId: payable === 0 ? 'GIFTCARD' : txn, totalAmount: payable, status: 'pending',
+          couponCode: coupon?.code, couponDiscount, giftCardCode: gc?.code, giftCardUsed: gcUsed, mrpTotal, productDiscount: discount },
+        { uid: user.uid, email: user.email || null, displayName: user.displayName || null },
+      );
+      sessionStorage.removeItem('purehome_coupon');
+      clearCart();
+      onOrderPlaced(oid);
+    } catch { alert('Order failed. Check your connection and try again.'); }
     finally { setBusy(false); }
   };
 
@@ -310,77 +286,87 @@ export default function CheckoutPage({ onBack, onOrderPlaced }: Props) {
               <div className="rounded-2xl border-2 border-accent-green/30 bg-accent-green/5 p-6 text-center">
                 <Gift className="h-10 w-10 text-accent-green mx-auto mb-3" />
                 <p className="font-serif text-xl font-bold text-ink-900">Covered by Gift Card</p>
-                <p className="text-[13px] text-ink-500 mt-1">No UPI payment needed.</p>
               </div>
             ) : !showPaid ? (
-              <>
-                <div className="rounded-2xl border border-sand-200 bg-white p-6 text-center space-y-4">
-                  <p className="text-[10px] font-mono uppercase tracking-[.15em] text-ink-400">Scan & Pay</p>
-                  <p className="font-serif text-3xl font-bold text-ink-900">₹{payable}</p>
+              /* ── QR Payment Screen ── */
+              <div className="rounded-2xl border border-sand-200 bg-white overflow-hidden">
+                {/* Header */}
+                <div className="bg-ink-900 px-6 py-4 text-center">
+                  <div className="flex items-center justify-center gap-2 mb-1">
+                    <ShieldCheck className="h-4 w-4 text-accent-green" />
+                    <p className="text-[10px] font-mono uppercase tracking-[.15em] text-sand-300">Secure UPI Payment</p>
+                  </div>
+                  <p className="font-serif text-3xl font-bold text-white">₹{payable}</p>
+                </div>
 
+                <div className="p-6 text-center space-y-4">
                   {qrTimer > 0 && qrUrl ? (
-                    <div className="inline-block rounded-2xl border-2 border-sand-200 p-3 bg-white">
-                      <img src={qrUrl} alt="UPI QR Code" className="h-[200px] w-[200px] sm:h-[250px] sm:w-[250px]" />
-                    </div>
+                    <>
+                      <div className="inline-block rounded-xl border border-sand-200 p-2 bg-white shadow-sm">
+                        <img src={qrUrl} alt="UPI QR" className="h-[200px] w-[200px] sm:h-[230px] sm:w-[230px]" />
+                      </div>
+                      <div>
+                        <p className="text-[11px] text-ink-500">Scan with any UPI app</p>
+                        <p className={`text-[12px] font-mono font-semibold mt-1 ${qrTimer < 60 ? 'text-accent-red' : 'text-ink-400'}`}>{fmtTimer(qrTimer)}</p>
+                      </div>
+                    </>
                   ) : qrTimer <= 0 ? (
-                    <div className="py-8">
-                      <p className="text-[13px] text-accent-red font-semibold">QR Code Expired</p>
-                      <button onClick={() => setQrTimer(300)} className="mt-2 text-[12px] text-accent-blue font-semibold underline">Generate New QR</button>
+                    <div className="py-6">
+                      <p className="text-[13px] text-accent-red font-semibold">QR Expired</p>
+                      <button onClick={() => setQrTimer(300)} className="mt-2 rounded-full border border-sand-300 px-4 py-1.5 text-[11px] font-semibold text-ink-600 active:scale-95">Refresh QR</button>
                     </div>
                   ) : (
-                    <div className="py-8"><p className="text-[12px] text-ink-400">Configure UPI in admin settings</p></div>
+                    <p className="py-6 text-[12px] text-ink-400">UPI not configured</p>
                   )}
 
-                  {/* Timer */}
-                  {qrTimer > 0 && (
-                    <p className={`text-[13px] font-mono font-semibold ${qrTimer < 60 ? 'text-accent-red' : 'text-ink-500'}`}>
-                      Expires in {fmtTimer(qrTimer)}
-                    </p>
-                  )}
-
-                  <p className="text-[10px] text-ink-400">Scan with any UPI app to pay</p>
+                  <div className="flex items-center gap-3 text-[9px] text-ink-400 justify-center">
+                    <span className="flex items-center gap-1"><ShieldCheck className="h-3 w-3 text-accent-green" /> 256-bit secured</span>
+                    <span>·</span>
+                    <span>Powered by UPI</span>
+                  </div>
                 </div>
 
-                {/* I've Paid button */}
-                <button onClick={() => setShowPaid(true)}
-                  className="w-full rounded-full bg-ink-900 py-3 text-[13px] font-semibold text-sand-50 active:scale-[0.97]">
-                  I've Paid
-                </button>
-              </>
+                <div className="border-t border-sand-100 p-4">
+                  <button onClick={() => setShowPaid(true)}
+                    className="w-full rounded-full bg-accent-green py-3 text-[13px] font-bold text-white active:scale-[0.97] shadow-sm">
+                    I've Completed Payment
+                  </button>
+                </div>
+              </div>
             ) : (
-              /* Transaction ID input after clicking I've Paid */
-              <div className="rounded-lg border border-sand-200 bg-white p-5 space-y-4">
+              /* ── Transaction ID Entry ── */
+              <div className="rounded-2xl border border-sand-200 bg-white p-6 space-y-4">
                 <div className="text-center">
-                  <CheckCircle className="h-8 w-8 text-accent-green mx-auto mb-2" />
-                  <p className="text-[14px] font-semibold text-ink-900">Enter Payment Details</p>
-                  <p className="text-[11px] text-ink-400 mt-1">Enter the UPI transaction ID from your payment app</p>
+                  <CheckCircle className="h-10 w-10 text-accent-green mx-auto mb-2" />
+                  <p className="text-[15px] font-bold text-ink-900">Confirm Payment</p>
+                  <p className="text-[12px] text-ink-500 mt-1">Enter the UTR or Transaction ID from your UPI app</p>
                 </div>
                 <div>
-                  <label className="block text-[11px] font-mono uppercase tracking-[.12em] text-ink-400 mb-2">Transaction ID / UTR</label>
-                  <input type="text" value={txnId} onChange={e => setTxnId(e.target.value.replace(/[^a-zA-Z0-9]/g, '').slice(0, 20))} placeholder="Enter transaction ID" maxLength={20}
-                    className="w-full rounded-lg border border-sand-300 bg-sand-50 px-3.5 py-3 text-[14px] font-mono outline-none focus:bg-white focus:border-ink-400 focus:ring-1 focus:ring-ink-200" />
-                  {txnId.length > 0 && txnId.length < 4 && <p className="mt-1 text-[10px] text-accent-red">Min 4 characters</p>}
-                  {txnId.length >= 20 && <p className="mt-1 text-[10px] text-ink-400">Max 20 characters</p>}
+                  <label className="block text-[11px] font-mono uppercase tracking-[.12em] text-ink-400 mb-2">Transaction ID / UTR Number</label>
+                  <input type="text" value={txnId} onChange={e => setTxnId(e.target.value.replace(/[^a-zA-Z0-9]/g, '').slice(0, 20))} placeholder="e.g. 412345678901" maxLength={20}
+                    className="w-full rounded-xl border border-sand-300 bg-sand-50 px-4 py-3.5 text-[15px] font-mono text-center tracking-widest outline-none focus:bg-white focus:border-ink-400 focus:ring-2 focus:ring-ink-200" />
+                  {txnId.length > 0 && txnId.length < 4 && <p className="mt-1.5 text-[10px] text-accent-red text-center">Minimum 4 characters</p>}
+                  {txnId.length >= 20 && <p className="mt-1.5 text-[10px] text-ink-400 text-center">Maximum 20 characters</p>}
+                  {txnId.length >= 4 && txnId.length < 20 && <p className="mt-1.5 text-[10px] text-accent-green text-center font-medium">{txnId.length} characters</p>}
                 </div>
-                <button onClick={() => setShowPaid(false)} className="text-[11px] text-ink-400 underline">Back to QR Code</button>
+                <button onClick={() => setShowPaid(false)} className="block mx-auto text-[11px] text-ink-400 underline">Back to QR Code</button>
               </div>
             )}
 
-            {/* Final total */}
+            {/* Price summary */}
             <div className="rounded-lg border border-sand-200 bg-white p-4 space-y-1 text-[12px]">
               <div className="flex justify-between text-ink-500"><span>Total MRP</span><span>₹{mrpTotal}</span></div>
-              {discount > 0 && <div className="flex justify-between text-accent-green"><span>Discount</span><span>−₹{discount}</span></div>}
-              {couponDiscount > 0 && <div className="flex justify-between text-accent-green"><span>Coupon</span><span>−₹{couponDiscount}</span></div>}
-              {gcUsed > 0 && <div className="flex justify-between text-accent-teal"><span>Gift Card</span><span>−₹{gcUsed}</span></div>}
+              {discount > 0 && <div className="flex justify-between text-accent-green"><span>Discount</span><span>-₹{discount}</span></div>}
+              {couponDiscount > 0 && <div className="flex justify-between text-accent-green"><span>Coupon</span><span>-₹{couponDiscount}</span></div>}
+              {gcUsed > 0 && <div className="flex justify-between text-accent-teal"><span>Gift Card</span><span>-₹{gcUsed}</span></div>}
               <div className="flex justify-between text-ink-500"><span>Delivery</span><span>{deliveryFee === 0 ? 'Free' : `₹${deliveryFee}`}</span></div>
               <div className="h-px bg-sand-200" />
-              <div className="flex justify-between text-[15px] font-bold text-ink-900"><span>You Pay</span><span className="font-serif">₹{payable}</span></div>
+              <div className="flex justify-between text-[15px] font-bold text-ink-900"><span>Total</span><span className="font-serif">₹{payable}</span></div>
             </div>
 
-            <div className="flex items-center justify-center gap-1.5 text-[10px] text-ink-400"><ShieldCheck className="h-4 w-4 text-accent-green" /> Secure & encrypted</div>
-            <button onClick={completeOrder} disabled={busy || (payable > 0 && (!showPaid || txnId.length < 4))}
-              className="w-full inline-flex items-center justify-center gap-2 rounded-full bg-accent-green py-3.5 text-[14px] font-bold text-white active:scale-[0.97] disabled:opacity-50">
-              {busy ? <><Loader2 className="h-4 w-4 animate-spin" /> Placing…</> : <><Package className="h-4 w-4" /> Complete Order — ₹{payable}</>}
+            <button onClick={completeOrder} disabled={busy || (payable > 0 && (!showPaid || txnId.length < 4 || txnId.length > 20))}
+              className="w-full inline-flex items-center justify-center gap-2 rounded-full bg-accent-green py-3.5 text-[14px] font-bold text-white active:scale-[0.97] disabled:opacity-40 shadow-sm">
+              {busy ? <><Loader2 className="h-4 w-4 animate-spin" /> Processing…</> : <><Package className="h-4 w-4" /> Place Order</>}
             </button>
           </motion.div>
         )}
