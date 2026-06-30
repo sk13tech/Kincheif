@@ -3,6 +3,7 @@ import { Package, Clock, CheckCircle, Truck, Home, ArrowLeft, ChevronRight, Refr
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../store/AuthContext';
 import { subscribeToOrders, cancelOrder, requestReplacement, subscribeSiteConfig, type FirestoreOrder, type SiteConfig, db } from '../lib/firebase';
+import { collection, query, where, getDocs as fbGetDocs, updateDoc } from 'firebase/firestore';
 import { sanitize } from '../lib/security';
 
 interface Props { onBack: () => void; }
@@ -43,12 +44,14 @@ function CompletePaymentCard({ order, onComplete }: { order: FirestoreOrder; onC
   const fmtT = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 
   const submit = async () => {
-    if (txnId.length < 4) return;
+    if (txnId.length < 4 || txnId.length > 20) return;
     setBusy(true);
     try {
-      const { collection: c, query: q, where: w, getDocs: g, updateDoc: u } = await import('firebase/firestore');
-      const snap = await g(q(c(db, 'orders'), w('orderId', '==', order.orderId)));
-      if (!snap.empty) await u(snap.docs[0].ref, { transactionId: sanitize(txnId) });
+      const q = query(collection(db, 'orders'), where('orderId', '==', order.orderId));
+      const snap = await fbGetDocs(q);
+      if (!snap.empty) {
+        await updateDoc(snap.docs[0].ref, { transactionId: sanitize(txnId) });
+      }
       onComplete();
     } catch { alert('Update failed. Try again.'); }
     setBusy(false);
@@ -83,12 +86,14 @@ function CompletePaymentCard({ order, onComplete }: { order: FirestoreOrder; onC
         <>
           <div>
             <label className="block text-[10px] font-mono uppercase tracking-[.12em] text-ink-400 mb-1">Transaction ID</label>
-            <input value={txnId} onChange={e => setTxnId(e.target.value)} placeholder="Enter UTR / Txn ID" maxLength={50}
+            <input value={txnId} onChange={e => setTxnId(e.target.value.replace(/[^a-zA-Z0-9]/g, '').slice(0, 20))} placeholder="Enter UTR / Txn ID" maxLength={20}
               className="w-full rounded-lg border border-sand-300 bg-white px-3 py-2.5 text-[13px] font-mono outline-none focus:border-ink-400" />
+            {txnId.length > 0 && txnId.length < 4 && <p className="text-[9px] text-accent-red mt-1">Min 4 characters</p>}
+            {txnId.length >= 20 && <p className="text-[9px] text-ink-400 mt-1">Max 20 characters</p>}
           </div>
           <div className="flex gap-2">
             <button onClick={() => setShowTxn(false)} className="flex-1 rounded-full border border-sand-300 py-2.5 text-[11px] font-semibold text-ink-600 active:scale-[0.97]">Back to QR</button>
-            <button onClick={submit} disabled={busy || txnId.length < 4} className="flex-1 rounded-full bg-accent-green py-2.5 text-[11px] font-semibold text-white active:scale-[0.97] disabled:opacity-40">
+            <button onClick={submit} disabled={busy || txnId.length < 4 || txnId.length > 20} className="flex-1 rounded-full bg-accent-green py-2.5 text-[11px] font-semibold text-white active:scale-[0.97] disabled:opacity-40">
               {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin mx-auto" /> : 'Complete Payment'}
             </button>
           </div>
@@ -113,7 +118,20 @@ export default function OrdersPage({ onBack }: Props) {
   useEffect(() => {
     if (!user) { setLoading(false); return; }
     setLoading(true);
-    return subscribeToOrders(user.uid, o => { setOrders(o); setLoading(false); if (selRef.current) { const u = o.find(x => x.id === selRef.current!.id); if (u) setSel(u); } });
+    return subscribeToOrders(user.uid, o => {
+      setOrders(o); setLoading(false);
+      if (selRef.current) { const u = o.find(x => x.id === selRef.current!.id); if (u) setSel(u); }
+      // Auto-cancel unpaid orders older than 2 hours
+      const twoHours = 2 * 60 * 60 * 1000;
+      o.forEach(async (order) => {
+        if (order.transactionId === 'AWAITING_PAYMENT' && order.status === 'pending') {
+          const age = Date.now() - new Date(order.createdAt).getTime();
+          if (age > twoHours) {
+            try { await updateDoc((await fbGetDocs(query(collection(db, 'orders'), where('orderId', '==', order.orderId)))).docs[0]?.ref, { status: 'cancelled', transactionId: 'AUTO_CANCELLED_UNPAID' }); } catch {}
+          }
+        }
+      });
+    });
   }, [user]);
 
   const doCancel = async () => {

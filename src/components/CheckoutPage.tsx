@@ -357,9 +357,10 @@ export default function CheckoutPage({ onBack, onOrderPlaced }: Props) {
                 </div>
                 <div>
                   <label className="block text-[11px] font-mono uppercase tracking-[.12em] text-ink-400 mb-2">Transaction ID / UTR</label>
-                  <input type="text" value={txnId} onChange={e => setTxnId(sanitize(e.target.value))} placeholder="Enter transaction ID" maxLength={50}
+                  <input type="text" value={txnId} onChange={e => setTxnId(e.target.value.replace(/[^a-zA-Z0-9]/g, '').slice(0, 20))} placeholder="Enter transaction ID" maxLength={20}
                     className="w-full rounded-lg border border-sand-300 bg-sand-50 px-3.5 py-3 text-[14px] font-mono outline-none focus:bg-white focus:border-ink-400 focus:ring-1 focus:ring-ink-200" />
                   {txnId.length > 0 && txnId.length < 4 && <p className="mt-1 text-[10px] text-accent-red">Min 4 characters</p>}
+                  {txnId.length >= 20 && <p className="mt-1 text-[10px] text-ink-400">Max 20 characters</p>}
                 </div>
                 <button onClick={() => setShowPaid(false)} className="text-[11px] text-ink-400 underline">Back to QR Code</button>
               </div>
