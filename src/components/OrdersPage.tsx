@@ -36,19 +36,21 @@ function CompletePaymentCard({ order, onComplete }: { order: FirestoreOrder; onC
   useEffect(() => subscribeSiteConfig(setCfg), []);
   useEffect(() => { const t = setInterval(() => setTimer(v => v <= 1 ? (clearInterval(t), 0) : v - 1), 1000); return () => clearInterval(t); }, []);
 
-  const qrData = (cfg.upiTemplate || '').replace(/<amount>/g, String(order.totalAmount)).replace(/\{amount\}/g, String(order.totalAmount)).replace('%3Camount%3E', String(order.totalAmount));
+  // Build UPI string with correct amount
+  const buildUpi = (tpl: string, amt: number) => { if (!tpl) return ''; return tpl.includes('am=') ? tpl.replace(/am=[^&]*/i, `am=${amt}`) : tpl + (tpl.includes('?') ? '&' : '?') + `am=${amt}`; };
+  const qrData = buildUpi(cfg.upiTemplate || '', order.totalAmount);
+  const qrImgUrl = qrData ? `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(qrData)}` : '';
   const fmtT = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 
   const submit = async () => {
     if (txnId.length < 4) return;
     setBusy(true);
     try {
-      const { collection: fbCol, query: fbQ, where: fbW, getDocs: fbGet, updateDoc } = await import('firebase/firestore');
-      const q = fbQ(fbCol(db, 'orders'), fbW('orderId', '==', order.orderId));
-      const snap = await fbGet(q);
-      if (!snap.empty) await updateDoc(snap.docs[0].ref, { transactionId: sanitize(txnId) });
+      const { collection: c, query: q, where: w, getDocs: g, updateDoc: u } = await import('firebase/firestore');
+      const snap = await g(q(c(db, 'orders'), w('orderId', '==', order.orderId)));
+      if (!snap.empty) await u(snap.docs[0].ref, { transactionId: sanitize(txnId) });
       onComplete();
-    } catch { alert('Failed. Try again.'); }
+    } catch { alert('Update failed. Try again.'); }
     setBusy(false);
   };
 
@@ -65,7 +67,7 @@ function CompletePaymentCard({ order, onComplete }: { order: FirestoreOrder; onC
           {timer > 0 && qrData ? (
             <div className="text-center">
               <div className="inline-block rounded-2xl border-2 border-sand-200 p-2 bg-white">
-                <img src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(qrData)}`} alt="QR" className="h-[160px] w-[160px]" />
+                <img src={qrImgUrl} alt="QR" className="h-[160px] w-[160px]" />
               </div>
               <p className={`text-[12px] font-mono font-semibold mt-2 ${timer < 60 ? 'text-accent-red' : 'text-ink-500'}`}>{fmtT(timer)}</p>
             </div>
@@ -169,6 +171,11 @@ export default function OrdersPage({ onBack }: Props) {
                 {(sel as any).status === 'cancelled' && <span className="inline-block mt-2 rounded-full bg-accent-red/10 text-accent-red border border-accent-red/20 px-3 py-0.5 text-[10px] font-mono uppercase">Cancelled</span>}
               </div>
 
+              {/* Complete Payment — shown at top for AWAITING_PAYMENT */}
+              {sel.transactionId === 'AWAITING_PAYMENT' && sel.status === 'pending' && (
+                <CompletePaymentCard order={sel} onComplete={() => setSel(null)} />
+              )}
+
               {/* Timeline with dates */}
               {(sel as any).status !== 'cancelled' && (
                 <div className="rounded-lg border border-sand-200 bg-white p-5">
@@ -263,11 +270,6 @@ export default function OrdersPage({ onBack }: Props) {
                   </div>
                 )}
               </div>
-
-              {/* Complete Payment — for AWAITING_PAYMENT orders */}
-              {sel.transactionId === 'AWAITING_PAYMENT' && sel.status === 'pending' && (
-                <CompletePaymentCard order={sel} onComplete={() => setSel(null)} />
-              )}
 
               {/* Actions */}
               <div className="space-y-2">

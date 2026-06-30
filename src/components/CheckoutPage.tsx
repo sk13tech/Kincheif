@@ -3,7 +3,8 @@ import { ArrowLeft, ShieldCheck, Check, Loader2, Package, Gift, MapPin, Trash2, 
 import { motion } from 'framer-motion';
 import { useCart } from '../store/CartContext';
 import { useAuth } from '../store/AuthContext';
-import { saveOrder, validateGiftCard, getSavedAddresses, saveAddress, deleteAddress, validatePincode, subscribeSiteConfig, type SavedAddress, type SiteConfig } from '../lib/firebase';
+import { saveOrder, validateGiftCard, getSavedAddresses, saveAddress, deleteAddress, validatePincode, subscribeSiteConfig, db, type SavedAddress, type SiteConfig } from '../lib/firebase';
+import { collection, query, where, getDocs as fbGetDocs, updateDoc } from 'firebase/firestore';
 import { sanitize, sanitizeEmail, sanitizePhone, sanitizePincode, checkRateLimit, isValidIndianPhone, isValidEmail, isValidAddress, isValidTransactionId, safeJsonParse } from '../lib/security';
 import type { CustomerInfo } from '../types';
 
@@ -132,11 +133,8 @@ export default function CheckoutPage({ onBack, onOrderPlaced }: Props) {
     setBusy(true);
     try {
       if (pendingOrderId) {
-        // Update existing pending order with txn ID
-        const { updateDoc, collection: fbCol, query: fbQ, where: fbW, getDocs: fbGet } = await import('firebase/firestore');
-        const { db: fireDb } = await import('../lib/firebase');
-        const q = fbQ(fbCol(fireDb, 'orders'), fbW('orderId', '==', pendingOrderId));
-        const snap = await fbGet(q);
+        const q = query(collection(db, 'orders'), where('orderId', '==', pendingOrderId));
+        const snap = await fbGetDocs(q);
         if (!snap.empty) {
           await updateDoc(snap.docs[0].ref, { transactionId: payable === 0 ? 'GIFTCARD' : sanitize(txnId) });
         }
@@ -151,14 +149,23 @@ export default function CheckoutPage({ onBack, onOrderPlaced }: Props) {
         sessionStorage.removeItem('purehome_coupon');
         clearCart(); onOrderPlaced(oid);
       }
-    } catch { alert('Failed. Try again.'); }
+    } catch (e) { alert('Order failed. Please try again.'); }
     finally { setBusy(false); }
   };
 
   const fmtTimer = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 
-  // Build QR URL outside JSX
-  const upiData = (siteCfg.upiTemplate || '').replace(/<amount>/g, String(payable)).replace(/\{amount\}/g, String(payable));
+  // Build UPI string — replace am= value with actual amount
+  function buildUpiWithAmount(template: string, amount: number): string {
+    if (!template) return '';
+    // If template has am= parameter, replace its value
+    if (template.includes('am=')) {
+      return template.replace(/am=[^&]*/i, `am=${amount}`);
+    }
+    // If no am= parameter, append it
+    return template + (template.includes('?') ? '&' : '?') + `am=${amount}`;
+  }
+  const upiData = buildUpiWithAmount(siteCfg.upiTemplate || '', payable);
   const qrUrl = upiData ? `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(upiData)}` : '';
 
   // Reusable input class
