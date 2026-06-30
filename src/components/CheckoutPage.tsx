@@ -157,6 +157,10 @@ export default function CheckoutPage({ onBack, onOrderPlaced }: Props) {
 
   const fmtTimer = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 
+  // Build QR URL outside JSX
+  const upiData = (siteCfg.upiTemplate || '').replace(/<amount>/g, String(payable)).replace(/\{amount\}/g, String(payable));
+  const qrUrl = upiData ? `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(upiData)}` : '';
+
   // Reusable input class
   const ic = (f: keyof CustomerInfo) => `w-full rounded-lg border bg-white px-3.5 py-2.5 text-[14px] outline-none focus:ring-1 ${errs[f] ? 'border-accent-red/50 focus:ring-accent-red/20' : 'border-sand-300 focus:border-ink-400 focus:ring-ink-200'}`;
   const lbl = "block text-[11px] font-mono uppercase tracking-[.12em] text-ink-400 mb-1";
@@ -303,25 +307,21 @@ export default function CheckoutPage({ onBack, onOrderPlaced }: Props) {
               </div>
             ) : !showPaid ? (
               <>
-                {/* QR Code */}
                 <div className="rounded-2xl border border-sand-200 bg-white p-6 text-center space-y-4">
                   <p className="text-[10px] font-mono uppercase tracking-[.15em] text-ink-400">Scan & Pay</p>
                   <p className="font-serif text-3xl font-bold text-ink-900">₹{payable}</p>
 
-                  {/* QR Code via Google Charts API */}
-                  {qrTimer > 0 ? (
+                  {qrTimer > 0 && qrUrl ? (
                     <div className="inline-block rounded-2xl border-2 border-sand-200 p-3 bg-white">
-                      <img
-                        src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent((siteCfg.upiTemplate || '').replace(/<amount>/g, String(payable)).replace(/\{amount\}/g, String(payable)).replace('%3Camount%3E', String(payable)))}`}
-                        alt="UPI QR Code"
-                        className="h-[180px] w-[180px] sm:h-[220px] sm:w-[220px]"
-                      />
+                      <img src={qrUrl} alt="UPI QR Code" className="h-[200px] w-[200px] sm:h-[250px] sm:w-[250px]" />
                     </div>
-                  ) : (
+                  ) : qrTimer <= 0 ? (
                     <div className="py-8">
                       <p className="text-[13px] text-accent-red font-semibold">QR Code Expired</p>
                       <button onClick={() => setQrTimer(300)} className="mt-2 text-[12px] text-accent-blue font-semibold underline">Generate New QR</button>
                     </div>
+                  ) : (
+                    <div className="py-8"><p className="text-[12px] text-ink-400">Configure UPI in admin settings</p></div>
                   )}
 
                   {/* Timer */}

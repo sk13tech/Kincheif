@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { db } from '../lib/firebase';
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, type User } from 'firebase/auth';
 import { collection, doc, getDoc, getDocs, updateDoc, deleteDoc, setDoc, onSnapshot } from 'firebase/firestore';
@@ -84,6 +84,7 @@ function Dashboard({ goTo }: { goTo: (p: string) => void }) {
   const [busy, setBusy] = useState(true);
   const [dupTxns, setDupTxns] = useState<string[]>([]);
   const [dupDismissed, setDupDismissed] = useState(false);
+  const prevDupRef = useRef('');
 
   useEffect(() => {
     let productCount = 0; let contactCount = 0; let countsLoaded = false;
@@ -99,9 +100,10 @@ function Dashboard({ goTo }: { goTo: (p: string) => void }) {
         if (x.transactionId && x.transactionId !== 'GIFTCARD' && x.status !== 'cancelled') txns[x.transactionId] = (txns[x.transactionId] || 0) + 1;
       });
       all.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-      // Single batch state update — no flickering
       setS({ ...st }); setRecent(all.slice(0, 5));
-      setDupTxns(Object.entries(txns).filter(([_, c]) => c > 1).map(([t]) => t));
+      const newDups = Object.entries(txns).filter(([_, c]) => c > 1).map(([t]) => t);
+      const newDupStr = newDups.join(',');
+      if (newDupStr !== prevDupRef.current) { prevDupRef.current = newDupStr; setDupTxns(newDups); }
       if (countsLoaded || snap.size > 0) setBusy(false);
     });
     return () => unsub();
@@ -590,6 +592,7 @@ function SiteConfig() {
       const sd: any = {};
       // Only save string fields — skip arrays/objects to avoid Firestore type issues
       Object.keys(cfg).forEach(k => { if (k !== 'instagramReels' && k !== '_ts') sd[k] = cfg[k]; });
+      sd.lastUpdated = new Date().toISOString();
       ['showHeroTitle', 'showHeroBadge', 'showHeroSubtitle', 'showTestimonials'].forEach(k => { if (sd[k] !== undefined) sd[k] = sd[k] !== 'false'; });
       await setDoc(doc(db, 'config', 'site'), sd, { merge: true });
       await setDoc(doc(db, 'config', 'categories'), { list: cats });
@@ -626,6 +629,7 @@ function SiteConfig() {
       </div>
 
       <button onClick={save} disabled={busy} className={btn1}>{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Save Settings</button>
+      {cfg.lastUpdated && <p className="text-[10px] text-slate-400 mt-2">Last updated: {new Date(cfg.lastUpdated as string).toLocaleString('en-IN')}</p>}
     </div>
   );
 }
