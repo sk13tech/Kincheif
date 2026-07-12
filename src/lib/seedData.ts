@@ -93,19 +93,6 @@ export async function seedAllData() {
     });
     results.push('✓ settings/giftCards (3 demo)');
 
-    // ─── Settings: Reels ───
-    await setDoc(doc(db, 'settings', 'reels'), {
-      items: [
-        { url: 'https://youtube.com/shorts/bj78vgOv96U', order: 1 },
-        { url: 'https://youtube.com/shorts/bj78vgOv96U', order: 2 },
-        { url: 'https://youtube.com/shorts/bj78vgOv96U', order: 3 },
-        { url: 'https://youtube.com/shorts/bj78vgOv96U', order: 4 },
-        { url: 'https://youtube.com/shorts/bj78vgOv96U', order: 5 },
-      ],
-      updatedAt: Timestamp.now(),
-    });
-    results.push('✓ settings/reels (5 videos)');
-
     // ─── Settings: Config ───
     await setDoc(doc(db, 'settings', 'config'), {
       freeDeliveryMin: 999,

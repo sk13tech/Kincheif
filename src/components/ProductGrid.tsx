@@ -148,10 +148,7 @@ export default function ProductGrid({ cart, searchQuery, wishlist, isLoggedIn, o
                 <button onClick={() => { if (!isLoggedIn) { onLoginClick(); return; } wishlist.toggle({ id: p.id, title: p.title, rate: p.rate, mrp: p.mrp, imageUrl: p.imageUrl, stock: p.stock, maxQty: p.maxQty, catagory: p.catagory }); }} aria-label="Wishlist" style={{ position: 'absolute', top: 8, right: 8, width: 32, height: 32, borderRadius: 16, border: 'none', background: 'rgba(255,255,255,.96)', boxShadow: '0 1px 6px rgba(0,0,0,.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0, color: wished ? '#e74c3c' : 'var(--text-sec)', zIndex: 1 }}>
                   <svg viewBox="0 0 24 24" style={{ ...heartIconStyle, fill: wished ? '#e74c3c' : 'none' }}><path d="M12.62 20.81c-.34.12-.9.12-1.24 0C8.48 19.82 2 15.69 2 8.69 2 5.6 4.49 3.1 7.56 3.1c1.82 0 3.43.88 4.44 2.24a5.53 5.53 0 014.44-2.24C19.51 3.1 22 5.6 22 8.69c0 7-6.48 11.13-9.38 12.12z" /></svg>
                 </button>
-                <div style={{ position: 'absolute', bottom: 8, left: 8, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: '.62rem', fontWeight: 600, color: '#fff', background: 'rgba(0,0,0,.55)', padding: '3px 7px', borderRadius: 6 }}>{p.catagory}</span>
-                  <span style={{ fontSize: '.62rem', fontWeight: 600, color: outOfStock ? '#fff' : '#0b57cf', background: outOfStock ? '#e74c3c' : 'rgba(255,255,255,.92)', padding: '3px 7px', borderRadius: 6 }}>{outOfStock ? 'Out of stock' : `${p.stock} in stock`}</span>
-                </div>
+
               </div>
 
               <div style={{ padding: '10px 12px 12px' }}>
