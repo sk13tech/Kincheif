@@ -15,6 +15,19 @@ export interface WishlistItem {
   catagory?: string;
 }
 
+function normalizeWishlistItem(id: string, data: Record<string, unknown>): WishlistItem {
+  return {
+    id,
+    title: String(data.title ?? ''),
+    rate: Number(data.rate ?? data.price ?? 0) || 0,
+    mrp: Number(data.mrp ?? 0) || 0,
+    imageUrl: String(data.imageUrl ?? data.image ?? ''),
+    stock: Number(data.stock ?? 999) || 999,
+    maxQty: Number(data.maxQty ?? data.stock ?? 1) || 1,
+    catagory: String(data.catagory ?? data.category ?? 'Food'),
+  };
+}
+
 export function useWishlist(user: User | null) {
   const [items, setItems] = useState<WishlistItem[]>([]);
 
@@ -23,7 +36,7 @@ export function useWishlist(user: User | null) {
     const ref = collection(db, 'users', user.uid, 'wishlist');
     const unsub = onSnapshot(ref, snap => {
       const list: WishlistItem[] = [];
-      snap.forEach(d => list.push({ id: d.id, ...d.data() } as WishlistItem));
+      snap.forEach(d => list.push(normalizeWishlistItem(d.id, d.data() as Record<string, unknown>)));
       setItems(list);
     }, () => {});
     return unsub;
