@@ -162,7 +162,7 @@ export default function CartPanel({ isOpen, onClose, cart, orders, isLoggedIn, o
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, padding: 24 }}>
             <div style={{ width: 48, height: 48, borderRadius: 24, background: '#fff3e0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><span style={{ fontSize: '1.4rem' }}>⏳</span></div>
             <div style={{ fontSize: '.92rem', fontWeight: 700, color: 'var(--text)' }}>Order received!</div>
-            <div style={{ fontSize: '.76rem', color: 'var(--text-sec)', textAlign: 'center' }}>Order #{orderId?.slice(-6).toUpperCase()}<br />Payment verification pending.</div>
+            <div style={{ fontSize: '.76rem', color: 'var(--text-sec)', textAlign: 'center' }}>Order #{orderId}<br />Payment verification pending.</div>
             <button onClick={reset} style={{ marginTop: 8, padding: '9px 20px', borderRadius: 8, border: '1px solid var(--border)', background: 'none', color: 'var(--text)', fontSize: '.8rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Continue shopping</button>
           </div>
         )}

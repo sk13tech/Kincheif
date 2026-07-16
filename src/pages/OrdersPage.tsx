@@ -72,7 +72,7 @@ function Detail({ order, onBack, orders }: { order: Order; onBack: () => void; o
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
           <div>
             <div style={{ fontSize: '.68rem', color: 'var(--text-sec)' }}>Order ID</div>
-            <div style={{ fontSize: '.82rem', fontWeight: 700, color: 'var(--text)', fontFamily: 'monospace' }}>#{order.id.slice(-8).toUpperCase()}</div>
+            <div style={{ fontSize: '.82rem', fontWeight: 700, color: 'var(--text)', fontFamily: 'monospace' }}>#{order.orderId || order.id}</div>
           </div>
           <span style={{ fontSize: '.66rem', fontWeight: 600, padding: '3px 8px', borderRadius: 6, background: cancelled ? '#fce4ec' : order.status === 'delivered' ? '#e8f5e9' : '#fff3e0', color: cancelled ? '#c62828' : order.status === 'delivered' ? '#2e7d32' : '#e65100' }}>
             {cancelled ? 'Cancelled' : statusChain.find(s => s.key === order.status)?.label || order.status}
@@ -167,6 +167,49 @@ function Detail({ order, onBack, orders }: { order: Order; onBack: () => void; o
               <div style={{ fontSize: '.7rem', color: '#c62828', opacity: .7, marginTop: 4, lineHeight: 1.5 }}>
                 Refund takes 5 to 7 working days to process. The refund transaction ID and date will be updated once processed.
               </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Tracking info — shown when shipped */}
+      {(order.status === 'shipped' || order.status === 'delivered') && (order.trackingLink || order.trackingId) && (
+        <div style={{ background: 'var(--bg)', borderRadius: 14, border: '1px solid var(--border)', padding: '18px 18px', marginBottom: 12 }}>
+          <div style={{ fontSize: '.82rem', fontWeight: 700, color: 'var(--text)', marginBottom: 10 }}>Shipment Tracking</div>
+          <div style={{ display: 'grid', gap: 8, fontSize: '.76rem' }}>
+            {order.trackingId && (
+              <div>
+                <div style={{ color: 'var(--text-sec)', marginBottom: 1 }}>Tracking ID</div>
+                <div style={{ color: 'var(--text)', fontWeight: 600, fontFamily: 'monospace' }}>{order.trackingId}</div>
+              </div>
+            )}
+            {order.trackingLink && (
+              <a
+                href={order.trackingLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '9px 16px',
+                  borderRadius: 8,
+                  background: '#0b57cf',
+                  color: '#fff',
+                  fontSize: '.78rem',
+                  fontWeight: 600,
+                  textDecoration: 'none',
+                  marginTop: 4,
+                  width: 'fit-content',
+                }}
+              >
+                <svg viewBox="0 0 24 24" style={{ width: 16, height: 16, fill: 'none', stroke: '#fff', strokeWidth: 1.7, strokeLinecap: 'round', strokeLinejoin: 'round', display: 'block' }}>
+                  <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6" />
+                  <path d="M15 3h6v6" />
+                  <path d="M10 14L21 3" />
+                </svg>
+                Track Order
+              </a>
             )}
           </div>
         </div>
