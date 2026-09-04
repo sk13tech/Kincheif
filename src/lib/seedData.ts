@@ -98,6 +98,9 @@ export async function seedAllData() {
       freeDeliveryMin: 999,
       deliveryCharge: 49,
       upiId: '',
+      codEnabled: true,
+      codMaxAmount: 5000,
+      codExtraCharge: 0,
       updatedAt: Timestamp.now(),
     });
     results.push('✓ settings/config');

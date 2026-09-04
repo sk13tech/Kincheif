@@ -18,6 +18,7 @@ export interface Order {
   id: string;
   orderId: string;
   userId: string;
+  paymentMethod?: string;
   items: OrderItem[];
   subtotal: number;
   couponCode: string;
@@ -61,6 +62,7 @@ export interface PlaceOrderData {
   amountPaid: number;
   utrNumber: string;
   address: DeliveryAddress;
+  paymentMethod: 'upi' | 'cod';
 }
 
 const CANCELLABLE = ['pending', 'placed', 'confirmed', 'processing'];
@@ -146,6 +148,7 @@ export function useOrders(user: User | null) {
       tx.set(orderRef, {
         orderId: randomOrderId,
         userId: user.email || user.uid,
+        paymentMethod: data.paymentMethod === 'cod' ? 'cod' : 'upi',
         items: orderItems,
         subtotal: sanitizeNumber(data.subtotal),
         couponCode: sanitizeCode(data.couponCode),

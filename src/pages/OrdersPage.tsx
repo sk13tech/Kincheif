@@ -82,7 +82,7 @@ function Detail({ order, onBack, orders }: { order: Order; onBack: () => void; o
           <div><div style={{ color: 'var(--text-sec)', marginBottom: 1 }}>Date</div><div style={{ color: 'var(--text)', fontWeight: 600 }}>{d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</div></div>
           <div><div style={{ color: 'var(--text-sec)', marginBottom: 1 }}>Time</div><div style={{ color: 'var(--text)', fontWeight: 600 }}>{d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</div></div>
           <div><div style={{ color: 'var(--text-sec)', marginBottom: 1 }}>Transaction ID</div><div style={{ color: 'var(--text)', fontWeight: 600, fontFamily: 'monospace', fontSize: '.7rem' }}>{order.utrNumber || '—'}</div></div>
-          <div><div style={{ color: 'var(--text-sec)', marginBottom: 1 }}>Payment</div><div style={{ color: 'var(--text)', fontWeight: 600 }}>₹{(order.amountPaid ?? 0).toLocaleString('en-IN')} UPI{order.giftCardUsed > 0 ? ` + ₹${order.giftCardUsed} Gift` : ''}</div></div>
+          <div><div style={{ color: 'var(--text-sec)', marginBottom: 1 }}>Payment</div><div style={{ color: 'var(--text)', fontWeight: 600 }}>{order.paymentMethod === 'cod' ? `COD · ₹${order.total.toLocaleString('en-IN')}` : `₹{(order.amountPaid ?? 0).toLocaleString('en-IN')} UPI${order.giftCardUsed > 0 ? ` + ₹${order.giftCardUsed} Gift` : ''}`}</div></div>
         </div>
 
         {/* Cancel button */}

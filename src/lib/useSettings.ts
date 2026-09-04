@@ -96,7 +96,14 @@ export function useReels() {
   return items;
 }
 
-export interface ConfigData { freeDeliveryMin: number; deliveryCharge: number; upiId: string; }
+export interface ConfigData {
+  freeDeliveryMin: number;
+  deliveryCharge: number;
+  upiId: string;
+  codEnabled?: boolean;
+  codMaxAmount?: number;
+  codExtraCharge?: number;
+}
 export function useConfig() {
   const [data, setData] = useState<ConfigData | null>(null);
   useEffect(() => {

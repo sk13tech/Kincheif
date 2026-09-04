@@ -38,6 +38,7 @@ export default function CartPanel({ isOpen, onClose, cart, orders, isLoggedIn, o
   const [utrError, setUtrError] = useState('');
   const [placing, setPlacing] = useState(false);
   const [orderId, setOrderId] = useState<string | null>(null);
+  const [paymentMethod, setPaymentMethod] = useState<'upi' | 'cod'>('upi');
 
   // Address
   const [addr, setAddr] = useState<Address>(emptyAddress);
@@ -106,9 +107,15 @@ export default function CartPanel({ isOpen, onClose, cart, orders, isLoggedIn, o
     setStep('payment');
   };
 
+  const codEnabled = config?.codEnabled ?? true;
+  const codMaxAmount = config?.codMaxAmount ?? 5000;
+  const codExtraCharge = config?.codExtraCharge ?? 0;
+  const codAvailable = codEnabled && grandTotal <= codMaxAmount;
+  const codTotal = grandTotal + codExtraCharge;
+
   const placeOrder = async () => {
     setUtrError('');
-    if (amountToPay > 0) {
+    if (paymentMethod === 'upi' && amountToPay > 0) {
       if (!isValidUTR(sanitizeUTR(utrInput))) { setUtrError('Enter a valid UTR / transaction number (6-30 alphanumeric characters)'); return; }
     }
     if (placing) return;
@@ -118,8 +125,10 @@ export default function CartPanel({ isOpen, onClose, cart, orders, isLoggedIn, o
         cartItems: cart.cartItems, subtotal,
         couponCode: appliedCoupon?.code || '', couponDiscount,
         giftCardCode: appliedGift?.code || '', giftCardUsed: giftUsed,
-        delivery, total: grandTotal, amountPaid: amountToPay,
-        utrNumber: sanitizeUTR(utrInput), address: addr,
+        delivery, total: paymentMethod === 'cod' ? codTotal : grandTotal,
+        amountPaid: paymentMethod === 'cod' ? 0 : amountToPay,
+        utrNumber: paymentMethod === 'cod' ? '' : sanitizeUTR(utrInput),
+        address: addr, paymentMethod,
       });
       if (id) { setOrderId(id); cart.clear(); setStep('success'); }
     } catch { }
@@ -269,8 +278,72 @@ export default function CartPanel({ isOpen, onClose, cart, orders, isLoggedIn, o
               </div>
             )}
 
+            {/* Payment Method Selector */}
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: '.84rem', fontWeight: 700, color: 'var(--text)', marginBottom: 10 }}>Payment Method</div>
+              <div style={{ display: 'grid', gap: 8 }}>
+                {/* UPI Option */}
+                <button
+                  onClick={() => setPaymentMethod('upi')}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px',
+                    borderRadius: 10, border: paymentMethod === 'upi' ? '2px solid #0b57cf' : '1px solid var(--border)',
+                    background: paymentMethod === 'upi' ? 'rgba(11,87,207,.04)' : 'none',
+                    cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left',
+                  }}
+                >
+                  <div style={{ width: 38, height: 38, borderRadius: 10, background: '#0b57cf', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <svg viewBox="0 0 24 24" style={{ width: 20, height: 20, fill: 'none', stroke: '#fff', strokeWidth: 1.8, strokeLinecap: 'round', strokeLinejoin: 'round', display: 'block' }}>
+                      <path d="M2 12h4l3-9 4 18 3-9h6" />
+                    </svg>
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: '.82rem', fontWeight: 600, color: 'var(--text)' }}>UPI Payment</div>
+                    <div style={{ fontSize: '.72rem', color: 'var(--text-sec)', marginTop: 1 }}>Pay instantly via UPI QR code</div>
+                  </div>
+                  <div style={{ width: 18, height: 18, borderRadius: 9, border: paymentMethod === 'upi' ? '5px solid #0b57cf' : '2px solid var(--border)', flexShrink: 0 }} />
+                </button>
+
+                {/* COD Option */}
+                {codAvailable ? (
+                  <button
+                    onClick={() => setPaymentMethod('cod')}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px',
+                      borderRadius: 10, border: paymentMethod === 'cod' ? '2px solid #27ae60' : '1px solid var(--border)',
+                      background: paymentMethod === 'cod' ? 'rgba(39,174,96,.04)' : 'none',
+                      cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left',
+                    }}
+                  >
+                    <div style={{ width: 38, height: 38, borderRadius: 10, background: '#27ae60', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <svg viewBox="0 0 24 24" style={{ width: 20, height: 20, fill: 'none', stroke: '#fff', strokeWidth: 1.8, strokeLinecap: 'round', strokeLinejoin: 'round', display: 'block' }}>
+                        <path d="M2 7h20v10H2z" />
+                        <circle cx="12" cy="12" r="2.5" />
+                        <path d="M6 7v10" />
+                        <path d="M18 7v10" />
+                      </svg>
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: '.82rem', fontWeight: 600, color: 'var(--text)' }}>Cash on Delivery</div>
+                      <div style={{ fontSize: '.72rem', color: 'var(--text-sec)', marginTop: 1 }}>
+                        Pay when order arrives{codExtraCharge > 0 ? ` (+₹${codExtraCharge} COD fee)` : ''}
+                      </div>
+                    </div>
+                    <div style={{ width: 18, height: 18, borderRadius: 9, border: paymentMethod === 'cod' ? '5px solid #27ae60' : '2px solid var(--border)', flexShrink: 0 }} />
+                  </button>
+                ) : (
+                  <div style={{ padding: '12px 14px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--hover)', opacity: .5 }}>
+                    <div style={{ fontSize: '.82rem', fontWeight: 600, color: 'var(--text-sec)' }}>Cash on Delivery</div>
+                    <div style={{ fontSize: '.72rem', color: 'var(--text-sec)', marginTop: 1 }}>
+                      {!codEnabled ? 'Not available' : `Available for orders up to ₹${codMaxAmount.toLocaleString('en-IN')}`}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
             {/* UPI */}
-            {amountToPay > 0 ? (
+            {paymentMethod === 'upi' && amountToPay > 0 ? (
               <div style={{ marginBottom: 16 }}>
                 <div style={{ fontSize: '.84rem', fontWeight: 700, color: 'var(--text)', marginBottom: 10 }}>Pay via UPI</div>
                 <div style={{ textAlign: 'center', marginBottom: 12 }}>
@@ -289,8 +362,21 @@ export default function CartPanel({ isOpen, onClose, cart, orders, isLoggedIn, o
               </div>
             )}
 
+            {paymentMethod === 'cod' && (
+              <div style={{ marginBottom: 12, padding: '10px 12px', borderRadius: 10, background: 'rgba(39,174,96,.06)', border: '1px solid rgba(39,174,96,.2)' }}>
+                <div style={{ fontSize: '.76rem', color: '#27ae60', fontWeight: 600 }}>
+                  ₹{codTotal.toLocaleString('en-IN')} payable on delivery
+                </div>
+                {codExtraCharge > 0 && (
+                  <div style={{ fontSize: '.7rem', color: 'var(--text-sec)', marginTop: 2 }}>
+                    Includes ₹{codExtraCharge} COD handling charge
+                  </div>
+                )}
+              </div>
+            )}
+
             <button onClick={placeOrder} disabled={placing} style={{ width: '100%', padding: '12px 0', borderRadius: 10, border: 'none', background: 'var(--text)', color: 'var(--bg)', fontSize: '.84rem', fontWeight: 600, cursor: placing ? 'not-allowed' : 'pointer', fontFamily: 'inherit', opacity: placing ? .6 : 1 }}>
-              {placing ? 'Placing order...' : 'Place Order'}
+              {placing ? 'Placing order...' : paymentMethod === 'cod' ? 'Place Order (COD)' : 'Place Order'}
             </button>
           </div>
         )}
